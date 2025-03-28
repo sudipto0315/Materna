@@ -1,177 +1,211 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, memo } from "react";
 import { Link } from "react-router-dom";
 import Layout from "@/components/Layout";
+import InfiniteScroll from "react-infinite-scroll-component";
 
-const sampleBlogs = {
-  "nutritional-counseling": [
-    {
-      id: 1,
-      title: "Essential Nutrients for a Healthy Pregnancy",
-      image: "/images/nutrition.jpg",
-      author: "Dr. Jane Smith",
-      upload_date: "2023-10-01",
-    },
-    {
-      id: 2,
-      title: "Managing Pregnancy Cravings Safely",
-      image: "/images/nutrition2.jpg",
-      author: "Dr. Emily Brown",
-      upload_date: "2023-09-15",
-    },
-  ],
-  "lifestyle-recommendations": [
-    {
-      id: 3,
-      title: "Safe Exercise Tips for Expectant Mothers",
-      image: "/images/lifestyle.jpg",
-      author: "Dr. Sarah Johnson",
-      upload_date: "2023-08-20",
-    },
-    {
-      id: 4,
-      title: "Improving Sleep During Pregnancy",
-      image: "/images/lifestyle2.jpg",
-      author: "Dr. Laura Green",
-      upload_date: "2023-07-10",
-    },
-  ],
-  "emotional-mental-health": [
-    {
-      id: 5,
-      title: "Coping with Pregnancy Anxiety",
-      image: "/images/emotional.jpg",
-      author: "Dr. Maria Lopez",
-      upload_date: "2023-06-05",
-    },
-    {
-      id: 6,
-      title: "Mindfulness for Expectant Moms",
-      image: "/images/emotional2.jpg",
-      author: "Dr. Anna White",
-      upload_date: "2023-05-12",
-    },
-  ],
-  "birth-preparation": [
-    {
-      id: 7,
-      title: "Packing Your Hospital Bag",
-      image: "/images/birth.jpg",
-      author: "Dr. Rachel Lee",
-      upload_date: "2023-04-18",
-    },
-    {
-      id: 8,
-      title: "Understanding Labor Stages",
-      image: "/images/birth2.jpg",
-      author: "Dr. Karen Davis",
-      upload_date: "2023-03-25",
-    },
-  ],
-};
+// Memoized Blog Card to prevent unnecessary re-renders
+const BlogCard = memo(({ blog }: { blog: Blog }) => (
+  <a
+    href={blog.url}
+    key={blog.id}
+    target="_blank"
+    rel="noopener noreferrer"
+    className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-shadow duration-300 block hover:no-underline"
+  >
+    <div className="h-48 relative">
+      <img
+        src={blog.image}
+        alt={blog.title}
+        className="w-full h-full object-cover"
+        onError={(e) => {
+          (e.target as HTMLImageElement).src = '/images/fallback-blog.jpg';
+        }}
+      />
+    </div>
+    <div className="p-6">
+      <h3 className="text-xl font-semibold mb-2 text-gray-800">
+        {blog.title}
+      </h3>
+      <p className="text-gray-600 mb-4 line-clamp-3">
+        {blog.description}
+      </p>
+      <div className="flex items-center justify-between text-sm text-gray-500">
+        <span className="max-w-[60%] truncate">
+          {blog.author}
+        </span>
+        <span>
+          {new Date(blog.publishedAt).toLocaleDateString()}
+        </span>
+      </div>
+      <div className="mt-3 text-sm text-gray-400">
+        Source: {blog.source}
+      </div>
+    </div>
+  </a>
+));
+
+interface Blog {
+  id: string;
+  title: string;
+  image: string;
+  author: string;
+  publishedAt: string;
+  url: string;
+  description: string;
+  source: string;
+}
 
 const Blogs: React.FC = () => {
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [blogs, setBlogs] = useState<any[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>("nutrition");
+  const [blogs, setBlogs] = useState<Blog[]>([]);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const [allArticles, setAllArticles] = useState<any[]>([]); // Store all articles for pagination
+
+  const categories = [
+    { id: "nutrition", name: "Pregnancy Nutrition", query: "pregnancy nutrition OR prenatal vitamins", file: "pregnancy_nutrition.json" },
+    { id: "health", name: "Maternal Health", query: "maternal health OR pregnancy exercise", file: "pregnancy_health.json" },
+    { id: "mental-health", name: "Mental Health", query: "pregnancy mental health OR postpartum depression", file: "pregnancy_mentalhealth.json" },
+    { id: "preparation", name: "Birth Preparation", query: "birth preparation OR labor stages", file: "pregnancy_birthprep.json" },
+  ];
+
+  const fetchBlogs = async (initialLoad = false) => {
+    if (!selectedCategory || isLoading) return;
+
+    setIsLoading(true);
+    try {
+      const category = categories.find((c) => c.id === selectedCategory);
+      if (!category) return;
+
+      let articles = allArticles;
+      if (initialLoad) {
+        // Fetch the JSON file only on initial load
+        const response = await fetch(`/${category.file}`);
+        const data = await response.json();
+
+        if (data.status !== "ok") throw new Error("Error loading JSON data");
+
+        articles = data.articles;
+        setAllArticles(articles); // Store all articles for pagination
+      }
+
+      // Pagination logic
+      const pageSize = 5; // Load 5 articles per page
+      const startIndex = (page - 1) * pageSize;
+      const endIndex = startIndex + pageSize;
+
+      // Filter articles (less strict: only require title)
+      const filteredArticles = articles.filter((a: any) => a.title);
+
+      // Slice the filtered articles for the current page
+      const newBlogs = filteredArticles
+        .slice(startIndex, endIndex)
+        .map((article: any) => ({
+          id: article.url,
+          title: article.title,
+          image: article.urlToImage || '/images/fallback-blog.jpg', // Fallback if no image
+          author: article.author || article.source.name,
+          publishedAt: article.publishedAt,
+          url: article.url,
+          description: article.description,
+          source: article.source.name,
+        }));
+
+      setBlogs((prev) => (initialLoad ? newBlogs : [...prev, ...newBlogs]));
+      setHasMore(endIndex < filteredArticles.length); // Update hasMore based on filtered articles
+      setPage((prev) => prev + 1);
+    } catch (error) {
+      console.error("Error fetching blogs:", error);
+      setHasMore(false);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (selectedCategory) {
-      setBlogs(sampleBlogs[selectedCategory]);
-    } else {
+      setPage(1);
       setBlogs([]);
+      setAllArticles([]); // Reset articles when category changes
+      fetchBlogs(true);
     }
   }, [selectedCategory]);
 
-  const handleCategoryClick = (category: string) => {
-    setSelectedCategory(category);
-  };
-
   return (
     <Layout>
-      {/* Introductory Section */}
-      <div
-        className="bg-cover bg-center text-white py-16 px-4 text-center rounded-lg my-8"
-        style={{ backgroundImage: "url('/images/pregnancy-bg.jpg')" }}
-      >
-        <h1 className="text-4xl font-bold mb-4 text-shadow-lg">
-          Welcome to Maternal Care Blogs
+      {/* Hero Section */}
+      <div className="bg-gradient-to-r from-pink-100 to-red-50 py-16 px-4 text-center rounded-lg my-8">
+        <h1 className="text-4xl font-bold mb-4 text-gray-800">
+          Pregnancy & Maternal Care Resources
         </h1>
-        <p className="text-lg max-w-2xl mx-auto text-shadow-md">
-          Pregnancy is a transformative journey. Explore our resources to support your health and well-being during this special time, with expert advice tailored to maternal care.
+        <p className="text-lg max-w-2xl mx-auto text-gray-600">
+          Trusted articles and research-based information for expecting mothers,
+          curated from medical sources and maternal health experts.
         </p>
       </div>
 
-      {/* Categories Section */}
+      {/* Category Selector */}
       <div className="bg-white p-4 rounded-lg shadow-md mb-8">
         <h2 className="text-2xl font-semibold text-center mb-6 text-red-600">
-          Blog Categories
+          Explore Pregnancy Topics
         </h2>
-        <div className="flex flex-wrap justify-around gap-4">
-          <div
-            onClick={() => handleCategoryClick("nutritional-counseling")}
-            className="flex-1 min-w-[200px] max-w-[250px] h-36 flex items-center justify-center bg-white rounded-lg shadow-md hover:shadow-lg hover:-translate-y-1 transition cursor-pointer border border-red-200"
-          >
-            <h3 className="text-red-600 text-lg font-medium text-center">
-              Nutritional Counseling
-            </h3>
-          </div>
-          <div
-            onClick={() => handleCategoryClick("lifestyle-recommendations")}
-            className="flex-1 min-w-[200px] max-w-[250px] h-36 flex items-center justify-center bg-white rounded-lg shadow-md hover:shadow-lg hover:-translate-y-1 transition cursor-pointer border border-red-200"
-          >
-            <h3 className="text-red-600 text-lg font-medium text-center">
-              Lifestyle Recommendations
-            </h3>
-          </div>
-          <div
-            onClick={() => handleCategoryClick("emotional-mental-health")}
-            className="flex-1 min-w-[200px] max-w-[250px] h-36 flex items-center justify-center bg-white rounded-lg shadow-md hover:shadow-lg hover:-translate-y-1 transition cursor-pointer border border-red-200"
-          >
-            <h3 className="text-red-600 text-lg font-medium text-center">
-              Emotional and Mental Health Support
-            </h3>
-          </div>
-          <div
-            onClick={() => handleCategoryClick("birth-preparation")}
-            className="flex-1 min-w-[200px] max-w-[250px] h-36 flex items-center justify-center bg-white rounded-lg shadow-md hover:shadow-lg hover:-translate-y-1 transition cursor-pointer border border-red-200"
-          >
-            <h3 className="text-red-600 text-lg font-medium text-center">
-              Birth Preparation Guidance
-            </h3>
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {categories.map((category) => (
+            <button
+              key={category.id}
+              onClick={() => setSelectedCategory(category.id)}
+              className={`p-4 rounded-lg transition-all duration-300 ${
+                selectedCategory === category.id
+                  ? "bg-red-600 text-white shadow-lg"
+                  : "bg-white text-red-600 hover:bg-red-50 border border-red-100"
+              }`}
+            >
+              {category.name}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Blog Section */}
+      {/* Blog List with Infinite Scroll */}
       {selectedCategory && (
-        <div className="bg-gray-50 p-4 rounded-lg shadow-md">
-          <h2 className="text-2xl font-semibold text-center mb-6 text-red-600">
-            {selectedCategory.replace(/-/g, " ").toUpperCase()}
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {blogs.map((blog) => (
-              <div
-                key={blog.id}
-                className="bg-white p-4 rounded-lg shadow-md hover:shadow-lg hover:-translate-y-1 transition border border-red-100"
-              >
-                <Link to={`/blog/${blog.id}`}>
-                  <img
-                    src={blog.image}
-                    alt={blog.title}
-                    className="w-full h-48 object-cover rounded-lg mb-4"
-                  />
-                  <h3 className="text-red-600 text-lg font-medium mb-2">
-                    {blog.title}
-                  </h3>
-                  <p className="text-gray-600 text-sm mb-1">
-                    Author: {blog.author}
-                  </p>
-                  <p className="text-gray-600 text-sm">
-                    Upload Date: {new Date(blog.upload_date).toLocaleDateString()}
-                  </p>
-                </Link>
+        <InfiniteScroll
+          dataLength={blogs.length}
+          next={() => fetchBlogs()}
+          hasMore={hasMore}
+          loader={
+            <div className="text-center my-8 text-gray-600">
+              Loading more articles...
+            </div>
+          }
+          endMessage={
+            <div className="text-center my-8 text-gray-600">
+              You've reached all available articles in this category
+            </div>
+          }
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {blogs.length > 0 ? (
+              blogs.map((blog) => (
+                <BlogCard key={blog.id} blog={blog} />
+              ))
+            ) : (
+              <div className="text-center my-8 text-gray-600 col-span-full">
+                No articles found for {categories.find(c => c.id === selectedCategory)?.name}. Try another category.
               </div>
-            ))}
+            )}
           </div>
+        </InfiniteScroll>
+      )}
+
+      {/* Attribution and Initial State */}
+      {!selectedCategory ? (
+        <div className="text-center py-16 text-gray-500">
+          Select a category to view related articles
+        </div>
+      ) : (
+        <div className="text-center text-sm text-gray-400 mt-8 pb-4">
+          Articles sourced from local data
         </div>
       )}
     </Layout>
