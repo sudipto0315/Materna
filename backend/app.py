@@ -16,7 +16,7 @@ jwt = JWTManager(app)
 
 # Enable CORS with proper configuration
 CORS(app, resources={r"/*": {
-    "origins": "http://localhost:8080",
+    "origins": "*",  # Allows all origins
     "methods": ["GET", "POST", "OPTIONS"],
     "allow_headers": ["Content-Type", "Authorization"]
 }})
