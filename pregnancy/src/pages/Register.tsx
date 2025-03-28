@@ -54,7 +54,7 @@ const RegisterPage: React.FC = () => {
       if (!token || !patientId) return;
 
       try {
-        const response = await axios.get("http://localhost:5000/patient-data", {
+        const response = await axios.get("/api/patient-data", {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = response.data;
@@ -149,7 +149,7 @@ const RegisterPage: React.FC = () => {
 
     try {
       const response = await axios.post(
-        "http://localhost:5000/register-patient",
+        "/api/register-patient",
         newPatientData,
         { headers: { Authorization: `Bearer ${token}` } }
       );

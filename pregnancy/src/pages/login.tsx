@@ -44,7 +44,7 @@ const LoginPage: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const response = await axios.post("http://localhost:5000/login", {
+      const response = await axios.post("/api/login", {
         username,
         password,
       });
@@ -54,7 +54,7 @@ const LoginPage: React.FC = () => {
 
       // Check if the user has registered patient data
       try {
-        await axios.get("http://localhost:5000/patient-data", {
+        await axios.get("/api/patient-data", {
           headers: { Authorization: `Bearer ${access_token}` },
         });
         navigate("/dashboard");
