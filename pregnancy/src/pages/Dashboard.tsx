@@ -8,9 +8,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, CheckCircle, Info, ArrowUpRight, ArrowDownRight, FileText } from "lucide-react";
+import { AlertTriangle, CheckCircle, Info, ArrowUpRight, ArrowDownRight, FileText, Download } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { jsPDF } from "jspdf"; // Import jsPDF for PDF generation
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -178,6 +179,104 @@ const Dashboard: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
+  // Hardcoded report string for testing
+  const hardcodedReport = `
+Response:
+ 
+1. Patient Overview:
+Name: Yashavi Patel
+Age: 35 years
+Gender: Female
+Due Date: 2025-03-27
+Last Menstrual Period: 2024-06-15
+Current Week: 40
+Blood Group: A+
+Pre-existing Conditions: Diabetes, Thyroid Disorder
+Height: 156 cm
+Current Weight: 64 kg
+Pre-pregnancy Weight: 60 kg
+
+2. Health Assessment:
+- The patient is 35 years old and is currently 40 weeks pregnant, with a due date of 2025-03-27.
+- She has a history of Diabetes and a Thyroid Disorder.
+- Her blood group is A+.
+- Her height is 156 cm, and her current weight is 64 kg, which is an increase of 4 kg from her pre-pregnancy weight of 60 kg.
+- She is in her first pregnancy.
+- She exercises occasionally (1-2 times/week).
+- Her emotional wellbeing is mostly positive.
+- She takes prenatal vitamins regularly.
+
+3. Potential Risk Indicators:
+- The patient's packed cell volume (PCV) is 57.5 %,, which is borderline (range: 40.0 - 50.0).
+- Her hemoglobin level is 12.5 g/dL, which is also borderline (Range: 13.0 - 17.0).
+- Her GLUCOSE fasting level is 315.0 mg/dL, which is high-risk (Range: 70.0 - 100.0).
+- Her Index Value is 11.0, which is high-risk (Range: NaN - 1.0).
+- Her TSH level is 10.1 mU/L, which is high-risk (Range: 0.4 - 4.0).
+
+4. Recommendations:
+- The patient should be closely monitored for anemia and gestational diabetes.
+- She should be referred to a specialist for her diabetes and thyroid disorder.
+- She should be advised to maintain a balanced diet, focusing on nutrient-rich foods and limiting high-risk foods such as sweets and fats.
+- She should be encouraged to engage in regular, low-impact exercise, such as walking.
+- She should be advised to take her prenatal vitamins as prescribed.
+
+5. Next Steps:
+- Schedule follow-up appointments with the obstetrician and specialists as necessary.
+- Arrange for additional testing and monitoring as recommended by the healthcare team.
+- Provide the patient with educational materials on pregnancy, diabetes, and thyroid disorders.
+- Encourage the patient to attend prenatal education classes and support groups.
+- Offer the patient counseling and emotional support throughout her pregnancy.
+  `.trim();
+
+  // Function to generate and download the detailed report as a PDF using the hardcoded string
+  const handleDownloadReport = () => {
+    try {
+      // Use the hardcoded report string
+      const report = hardcodedReport || 'No report content available';
+
+      // Generate PDF using jsPDF
+      const doc = new jsPDF();
+      let y = 10; // Starting y-position
+
+      // Add the consistent heading "Maternal Health Report"
+      doc.setFontSize(20); // Slightly larger for the main heading
+      doc.text("Maternal Health Report", 10, y);
+      y += 15; // Add space after the heading
+
+      // Process the report content with reduced font sizes
+      const lines = report.split('\n');
+      lines.forEach(line => {
+        if (line.startsWith('Response:')) {
+          // Skip the "Response:" line as it's not needed in the PDF
+          return;
+        } else if (line.match(/^\d+\.\s/)) {
+          // Section headings (e.g., "1. Patient Overview:")
+          doc.setFontSize(14); // Reduced from 18
+          doc.text(line, 10, y);
+        } else if (line.startsWith('- ')) {
+          // List items
+          doc.setFontSize(9); // Reduced from 12
+          doc.text(`• ${line.substring(2)}`, 15, y);
+        } else {
+          // Regular text
+          doc.setFontSize(9); // Reduced from 12
+          doc.text(line, 10, y);
+        }
+        y += 8; // Reduced line spacing from 10 to 8 to fit more content
+        if (y > 280) { // Check if we need a new page
+          doc.addPage();
+          y = 10;
+        }
+      });
+
+      // Download the PDF
+      doc.save(`detailed_patient_report_${patientData.id}.pdf`);
+    } catch (error) {
+      console.error('Error generating PDF report:', error);
+      alert('Failed to download the detailed report. Please try again later.');
+    }
+  };
+
   return (
     <Layout>
       <div className="container mx-auto p-6 animate-fade-in">
@@ -220,12 +319,18 @@ const Dashboard: React.FC = () => {
                 You have uploaded {medicalReports.length} medical reports.
               </div>
               
-              <Link to="/view-reports">
-                <Button variant="outline" size="sm" className="mt-2">
-                  <FileText className="mr-2 h-4 w-4" />
-                  View All Reports
+              <div className="flex gap-2 mt-2">
+                <Link to="/view-reports">
+                  <Button variant="outline" size="sm">
+                    <FileText className="mr-2 h-4 w-4" />
+                    View All Reports
+                  </Button>
+                </Link>
+                <Button variant="outline" size="sm" onClick={handleDownloadReport}>
+                  <Download className="mr-2 h-4 w-4" />
+                  Download Detailed Patient Report
                 </Button>
-              </Link>
+              </div>
             </CardContent>
           </Card>
         )}

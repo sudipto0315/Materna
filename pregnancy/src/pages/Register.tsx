@@ -317,8 +317,6 @@ const RegisterPage: React.FC = () => {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="Female">Female</SelectItem>
-                        <SelectItem value="Male">Male</SelectItem>
-                        <SelectItem value="Other">Other</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
