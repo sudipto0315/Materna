@@ -206,8 +206,8 @@ def register_patient():
         'hospital': data.get('preferredHospital'),
         'gravida': gravida,
         'para': para,
-        'registration_date': datetime.datetime.now().isoformat(),
-        'last_updated': datetime.datetime.now().isoformat()
+        'registration_date': datetime.now().isoformat(),  # Fixed
+        'last_updated': datetime.now().isoformat()        # Fixed
     }
 
     print("Patient data to insert:", patient_data)
@@ -295,7 +295,7 @@ def store_report():
         'file_url': data.get('fileUrl'),
         'notes': data.get('notes'),
         'analysis_results': json.dumps(data.get('analysisResults', {})),
-        'created_at': datetime.datetime.now().isoformat()
+        'created_at': datetime.now().isoformat()
     }
 
     if not all([report_data['report_id'], report_data['type'], report_data['category'], report_data['date'], report_data['file_url']]):
