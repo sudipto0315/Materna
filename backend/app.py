@@ -3,7 +3,7 @@ import sqlite3
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_cors import CORS
-import datetime
+from datetime import datetime, timedelta
 import uuid
 import json
 import requests
