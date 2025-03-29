@@ -9,6 +9,11 @@ import json
 import requests
 import json
 
+
+import asyncio
+import threading
+from flask import jsonify
+
 from flask import Flask, request, jsonify
 from pydantic import BaseModel, ValidationError
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -81,6 +86,16 @@ def init_db():
        A notes TEXT,
         analysis_results TEXT,  -- Store JSON string of analysis results
         created_at TIMESTAMP,
+        FOREIGN KEY (patient_id) REFERENCES Patients(patient_id)
+    )''')
+       # Add a new table for storing generated reports
+    c.execute('''CREATE TABLE IF NOT EXISTS GeneratedReports (
+        report_id TEXT PRIMARY KEY,
+        patient_id VARCHAR(50) NOT NULL,
+        report_content TEXT,
+        status TEXT NOT NULL,
+        created_at TIMESTAMP,
+        completed_at TIMESTAMP,
         FOREIGN KEY (patient_id) REFERENCES Patients(patient_id)
     )''')
     conn.commit()
@@ -534,7 +549,46 @@ def initialize_system():
 with app.app_context():
     initialize_system()
 
-# API route to generate maternal report
+# # API route to generate maternal report
+# @app.route('/generate_report', methods=['POST'])
+# def generate_report():
+#     try:
+#         # Get JSON data from request
+#         data = request.get_json()
+        
+#         # Validate input using Pydantic
+#         try:
+#             patient_request = PatientRequest(**data)
+#         except ValidationError as e:
+#             return jsonify({"error": "Invalid input data", "details": e.errors()}), 400
+        
+#         patient_info = extract_patient_context(patient_request.patient_data, patient_request.patient_id)
+#         if patient_info == "Patient not found.":
+#             return jsonify({"error": "Patient not found in the provided data"}), 404
+        
+#         report = generate_maternal_report(patient_info, vector_store, model, tokenizer)
+#         print(report)
+#         return jsonify({"report": report})
+#     except Exception as e:
+#         return jsonify({"error": str(e)}), 500
+
+def generate_report_task(report_id, patient_id, patient_info):
+    # Generate the report
+    report = generate_maternal_report(patient_info, vector_store, model, tokenizer)
+    
+    # Update database with the completed report
+    conn = sqlite3.connect('hack.db')
+    c = conn.cursor()
+    c.execute('''UPDATE GeneratedReports 
+                 SET report_content = ?, status = ?, completed_at = ? 
+                 WHERE report_id = ?''', 
+              (report, 'completed', datetime.now().isoformat(), report_id))
+    conn.commit()
+    conn.close()
+    
+    print(f"Report {report_id} generated and stored in database")
+
+# Modified API route to handle asynchronous report generation
 @app.route('/generate_report', methods=['POST'])
 def generate_report():
     try:
@@ -547,13 +601,67 @@ def generate_report():
         except ValidationError as e:
             return jsonify({"error": "Invalid input data", "details": e.errors()}), 400
         
-        patient_info = extract_patient_context(patient_request.patient_data, patient_request.patient_id)
+        patient_id = patient_request.patient_id
+        patient_info = extract_patient_context(patient_request.patient_data, patient_id)
         if patient_info == "Patient not found.":
             return jsonify({"error": "Patient not found in the provided data"}), 404
         
-        report = generate_maternal_report(patient_info, vector_store, model, tokenizer)
-        print(report)
-        return jsonify({"report": report})
+        # Generate a unique report ID
+        report_id = str(uuid.uuid4())
+        
+        # Store initial entry in database
+        conn = sqlite3.connect('hack.db')
+        c = conn.cursor()
+        c.execute('''INSERT INTO GeneratedReports 
+                     (report_id, patient_id, status, created_at) 
+                     VALUES (?, ?, ?, ?)''',
+                  (report_id, patient_id, 'processing', datetime.now().isoformat()))
+        conn.commit()
+        conn.close()
+        
+        # Start background task to generate the report
+        thread = threading.Thread(
+            target=generate_report_task, 
+            args=(report_id, patient_id, patient_info)
+        )
+        thread.daemon = True
+        thread.start()
+        
+        # Return immediately with the report_id that client can use to check status
+        return jsonify({
+            "message": "Report generation started", 
+            "report_id": report_id, 
+            "status": "processing"
+        })
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# Add a new endpoint to check report status and retrieve the report
+@app.route('/check_report/<report_id>', methods=['GET'])
+def check_report(report_id):
+    try:
+        conn = sqlite3.connect('hack.db')
+        c = conn.cursor()
+        c.execute("SELECT report_id, patient_id, report_content, status, created_at, completed_at FROM GeneratedReports WHERE report_id = ?", 
+                  (report_id,))
+        report = c.fetchone()
+        conn.close()
+        
+        if not report:
+            return jsonify({"error": "Report not found"}), 404
+        
+        report_data = {
+            "report_id": report[0],
+            "patient_id": report[1],
+            "report_content": report[2],
+            "status": report[3],
+            "created_at": report[4],
+            "completed_at": report[5]
+        }
+        
+        return jsonify(report_data), 200
+    
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
