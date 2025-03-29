@@ -14,12 +14,7 @@ const ViewReportsPage: React.FC = () => {
   const { isRegistered, patientData, medicalReports } = useApp();
   const [activeTab, setActiveTab] = useState("all");
 
-  useEffect(() => {
-    if (!isRegistered) {
-      navigate("/register");
-    }
-  }, [isRegistered, navigate]);
-
+  
   // Filter reports based on active tab
   const filteredReports = activeTab === "all"
     ? medicalReports

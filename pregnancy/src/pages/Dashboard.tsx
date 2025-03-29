@@ -22,12 +22,7 @@ const Dashboard: React.FC = () => {
     medicalReports 
   } = useApp();
 
-  useEffect(() => {
-    if (!isRegistered) {
-      navigate("/register");
-    }
-  }, [isRegistered, navigate]);
-
+  
   if (!patientData.lmp) {
     return (
       <Layout>

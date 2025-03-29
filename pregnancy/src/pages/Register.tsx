@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { calculateDueDate, getMedicalConditionsList } from "@/lib/utils";
@@ -12,13 +12,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import axios from "axios";
+import { useApp } from "@/contexts/AppContext";
 
 const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
+  const { setPatientData, setIsRegistered } = useApp(); // Add context setters
   const [activeTab, setActiveTab] = useState("personal");
   const [registrationSuccess, setRegistrationSuccess] = useState(false);
   const [successType, setSuccessType] = useState<"new" | "update" | null>(null);
-  const [patientData, setPatientData] = useState<any>({});
+  const [patientData, setLocalPatientData] = useState<any>({}); // Local state for fetched data
 
   const initialFormData = {
     firstName: "",
@@ -46,11 +48,10 @@ const RegisterPage: React.FC = () => {
 
   const [formData, setFormData] = useState(initialFormData);
 
-  // Fetch patient data on component mount
   useEffect(() => {
     const fetchPatientData = async () => {
       const token = localStorage.getItem("token");
-      const patientId = localStorage.getItem("patient_id"); // Stored during login
+      const patientId = localStorage.getItem("patient_id");
       if (!token || !patientId) return;
 
       try {
@@ -58,7 +59,9 @@ const RegisterPage: React.FC = () => {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = response.data;
-        setPatientData(data);
+        setLocalPatientData(data);
+        setPatientData(data); // Update context
+        setIsRegistered(true); // Mark as registered
         setFormData((prev) => ({
           ...prev,
           firstName: data.firstName || "",
@@ -89,7 +92,7 @@ const RegisterPage: React.FC = () => {
     };
 
     fetchPatientData();
-  }, []);
+  }, [setPatientData, setIsRegistered]);
 
   const isEditing = !!patientData.patient_id;
 
@@ -138,14 +141,12 @@ const RegisterPage: React.FC = () => {
         description: "Please log in to continue.",
         variant: "destructive",
       });
-      navigate("/");
+      navigate("/login");
       return;
     }
 
     const wasNewRegistration = !patientData.patient_id;
-    const newPatientData = {
-      ...formData,
-    };
+    const newPatientData = { ...formData };
 
     try {
       const response = await axios.post(
@@ -154,7 +155,10 @@ const RegisterPage: React.FC = () => {
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      setPatientData({ ...newPatientData, patient_id: patientId });
+      const updatedPatientData = { ...newPatientData, patient_id: patientId };
+      setPatientData(updatedPatientData); // Update context
+      setLocalPatientData(updatedPatientData); // Update local state
+      setIsRegistered(true); // Update context
       setSuccessType(wasNewRegistration ? "new" : "update");
       setRegistrationSuccess(true);
 
@@ -173,7 +177,12 @@ const RegisterPage: React.FC = () => {
     }
   };
 
-  const navigateToDashboard = () => navigate("/dashboard");
+  const navigateToDashboard = () => {
+    setActiveTab("personal"); // Reset tab
+    setRegistrationSuccess(false); // Reset success state
+    setFormData(initialFormData); // Reset form data if not editing
+    navigate("/dashboard");
+  };
 
   const nextTab = () => {
     if (activeTab === "personal") {
@@ -198,37 +207,6 @@ const RegisterPage: React.FC = () => {
 
   const medicalConditions = getMedicalConditionsList();
 
-  if (registrationSuccess) {
-    return (
-      <Layout>
-        <div className="container mx-auto py-10 px-4 md:px-6 max-w-3xl animate-fade-in">
-          <Card className="glass-panel">
-            <CardHeader>
-              <CardTitle className="text-center">
-                {successType === "new" ? "Registration Successful!" : "Profile Updated Successfully"}
-              </CardTitle>
-              {successType === "new" && (
-                <CardDescription className="text-center">
-                  Your patient ID is: <span className="font-semibold">{patientData.patient_id}</span>
-                </CardDescription>
-              )}
-            </CardHeader>
-            <CardContent className="flex flex-col items-center space-y-4">
-              <p className="text-center text-muted-foreground">
-                {successType === "new"
-                  ? "You can now upload your medical reports and complete the health questionnaire."
-                  : "Your registration details have been updated."}
-              </p>
-              <Button onClick={navigateToDashboard} className="materna-button">
-                Continue to Dashboard
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </Layout>
-    );
-  }
-
   return (
     <Layout>
       <div className="container mx-auto py-10 px-4 md:px-6 max-w-3xl animate-fade-in">
@@ -252,6 +230,22 @@ const RegisterPage: React.FC = () => {
               <TabsTrigger value="health">Health Metrics</TabsTrigger>
               <TabsTrigger value="pregnancy">Pregnancy Information</TabsTrigger>
             </TabsList>
+
+            {registrationSuccess && (
+              <div className="p-6 text-center">
+                <CardTitle>
+                  {successType === "new" ? "Registration Successful!" : "Profile Updated Successfully"}
+                </CardTitle>
+                {successType === "new" && (
+                  <CardDescription>
+                    Your patient ID is: <span className="font-semibold">{patientData.patient_id}</span>
+                  </CardDescription>
+                )}
+                <Button onClick={navigateToDashboard} className="materna-button mt-4">
+                  Continue to Dashboard
+                </Button>
+              </div>
+            )}
 
             <TabsContent value="personal">
               <div className="p-6">
@@ -317,6 +311,8 @@ const RegisterPage: React.FC = () => {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="Female">Female</SelectItem>
+                        <SelectItem value="Male">Male</SelectItem>
+                        <SelectItem value="Other">Other</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

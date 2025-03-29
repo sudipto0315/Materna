@@ -85,12 +85,7 @@ const QuestionnaireForm: React.FC = () => {
     additionalComments: "",
   });
 
-  useEffect(() => {
-    if (!isRegistered) {
-      navigate("/register");
-    }
-  }, [isRegistered, navigate]);
-
+  
   const handleCheckboxGroupChange = (field: string, value: string) => {
     let updatedValues;
 
