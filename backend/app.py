@@ -552,6 +552,7 @@ def generate_report():
             return jsonify({"error": "Patient not found in the provided data"}), 404
         
         report = generate_maternal_report(patient_info, vector_store, model, tokenizer)
+        print(report)
         return jsonify({"report": report})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
