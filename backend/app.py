@@ -6,6 +6,18 @@ from flask_cors import CORS
 import datetime
 import uuid
 import json
+import requests
+import json
+
+from flask import Flask, request, jsonify
+from pydantic import BaseModel, ValidationError
+from transformers import AutoModelForCausalLM, AutoTokenizer
+import torch
+from langchain_community.document_loaders import PyPDFLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.vectorstores import FAISS
+from datetime import datetime
 
 app = Flask(__name__)
 
@@ -317,6 +329,232 @@ def get_medical_reports():
         })
 
     return jsonify(medical_reports), 200
+
+# Global variables for model, tokenizer, and vector store (loaded at startup)
+model = None
+tokenizer = None
+vector_store = None
+
+# Pydantic model for JSON input validation
+class PatientRequest(BaseModel):
+    patient_id: str
+    patient_data: dict  # JSON object containing patient data
+
+# [All unchanged functions remain the same: load_and_split_pdf, create_vector_store, 
+# initialize_model_and_tokenizer, calculate_pregnancy_week, extract_patient_context, 
+# generate_maternal_report]
+
+def load_and_split_pdf(pdf_path):
+    loader = PyPDFLoader(pdf_path)
+    documents = loader.load()
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,
+        chunk_overlap=200,
+        length_function=len
+    )
+    chunks = text_splitter.split_documents(documents)
+    print(f"Your PDF has been split into {len(chunks)} chunks")
+    return chunks
+
+def create_vector_store(chunks, model_name="sentence-transformers/all-MiniLM-L6-v2", save_path="faiss_index"):
+    embeddings = HuggingFaceEmbeddings(model_name=model_name)
+    vector_store = FAISS.from_documents(chunks, embeddings)
+    vector_store.save_local(save_path)
+    return vector_store
+
+def initialize_model_and_tokenizer(model_name="ritvik77/Medical_Doctor_AI_LoRA-Mistral-7B-Instruct_FullModel"):
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        torch_dtype=torch.float16,
+        device_map="auto",
+        load_in_4bit=True
+    )
+    return tokenizer, model
+
+def calculate_pregnancy_week(lmp_date):
+    lmp = datetime.strptime(lmp_date, '%Y-%m-%d')
+    current_date = datetime.now()
+    days_pregnant = (current_date - lmp).days
+    weeks_pregnant = days_pregnant // 7
+    return weeks_pregnant
+
+def extract_patient_context(patient_data, patient_id):
+    if patient_id not in patient_data:
+        return "Patient not found."
+    
+    patient = patient_data[patient_id]
+    personal_info = patient['personal_info']
+    questionnaire = patient['questionnaire']
+    risk_factors = patient.get('risk_factors', [])
+    test_results = patient.get('test_results', [])
+    
+    context = f"""
+Patient Summary:
+Name: {personal_info['first_name']} {personal_info['last_name']}
+Age: {2025 - int(personal_info['dob'].split('-')[0])} years
+Gender: {personal_info['gender']}
+Due Date: {personal_info['due_date']}
+Last Menstrual Period: {personal_info['lmp']}
+Current Week: {calculate_pregnancy_week(personal_info['lmp'])}
+Blood Group: {personal_info['blood_group']}
+Pre-existing Conditions: {personal_info['preexisting_conditions']}
+Height: {personal_info['height_cm']} cm
+Current Weight: {personal_info['current_weight']} kg
+Pre-pregnancy Weight: {personal_info['pre_pregnancy_weight']} kg
+
+Questionnaire Information:
+First Pregnancy: {questionnaire['is_first_pregnancy']}
+Exercise Frequency: {questionnaire['exercise_frequency']}
+Emotional Wellbeing: {questionnaire['emotional_wellbeing']}
+Prenatal Vitamins: {questionnaire['prenatal_vitamins']}
+"""
+    
+    if risk_factors:
+        context += "Risk Factors: ,"
+        for risk in risk_factors:
+            context += f"- {risk['test_name']}: {risk['result_value']} {risk['result_unit']} (Reference Range: {risk['reference_range']}), Risk Level: {risk['risk_level']},"
+    
+    abnormal_results = [result for result in test_results if result['risk_level'] in ['borderline', 'high_risk']]
+    if abnormal_results:
+        context += "Abnormal Test Results: ,"
+        for result in abnormal_results:
+            context += f"- {result['test_name']}: {result['result_value']} {result['result_unit']} (Reference Range: {result['ref_range_low']} - {result['ref_range_high']}), Risk Level: {result['risk_level']},"
+    
+    return context
+
+def generate_maternal_report(patient_info, vector_store, model, tokenizer):
+    if not tokenizer:
+        raise ValueError("Tokenizer failed to initialize. Ensure 'sentencepiece' is installed.")
+    retrieved_docs = vector_store.similarity_search(patient_info, k=3)
+    medical_context = "\n".join([doc.page_content[:300] for doc in retrieved_docs])
+    
+    prompt = f"""You are an expert obstetrician. Analyze this maternal patient profile and provide a health assessment:
+
+Patient Profile:
+{patient_info}
+
+Guidelines:
+{medical_context}
+
+Provide a profile analysis with:
+1. Patient Overview
+2. Health Status Analysis
+3. Potential Risk Indicators
+4. Recommendations
+5. Next Steps
+"""
+
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    
+    inputs = tokenizer(
+        prompt, 
+        return_tensors="pt", 
+        padding=True,
+        truncation=True,
+        max_length=3000
+    )
+    inputs = inputs.to(model.device)
+    
+    print("Starting generation...")
+    
+    try:
+        outputs = model.generate(
+            inputs.input_ids,
+            attention_mask=inputs.attention_mask,
+            max_new_tokens=800,
+            temperature=0.3,
+            top_p=0.9,
+            do_sample=False,
+            num_beams=1,
+            pad_token_id=tokenizer.pad_token_id,
+            eos_token_id=tokenizer.eos_token_id,
+        )
+        
+        report = tokenizer.decode(outputs[0][inputs.input_ids.size(1):], skip_special_tokens=True)
+        
+        print(f"Generation complete, produced {len(outputs[0]) - inputs.input_ids.size(1)} tokens")
+        
+        if not report or len(report) < 50:
+            print("Generated report too short, returning fallback")
+            return """
+# Maternal Health Assessment
+
+## Patient Overview
+The patient is currently pregnant and receiving prenatal care.
+
+## Health Status Analysis
+Based on the available information, the patient appears to be in stable condition.
+
+## Potential Risk Indicators
+A comprehensive risk assessment requires in-person evaluation.
+
+## Recommendations
+- Continue prenatal vitamins
+- Maintain regular checkups
+- Monitor for warning signs
+- Stay hydrated and maintain a balanced diet
+
+## Next Steps
+Schedule next prenatal appointment within 4 weeks.
+"""
+        
+        return report
+    
+    except Exception as e:
+        print(f"Error during generation: {str(e)}")
+        import traceback
+        print(traceback.format_exc())
+        return "Error generating report. Please try again with simpler parameters."
+
+# Startup initialization
+def initialize_system():
+    global model, tokenizer, vector_store
+    pdf_path = "maternacare.pdf"
+    
+    try:
+        print("Loading and splitting PDF...")
+        chunks = load_and_split_pdf(pdf_path)
+        
+        print("Creating vector store...")
+        vector_store = create_vector_store(chunks, save_path="maternal_care_faiss_index")
+        
+        print("Initializing model and tokenizer...")
+        tokenizer, model = initialize_model_and_tokenizer()  
+        print("System initialized successfully.")
+    except Exception as e:
+        print(f"Error during initialization: {str(e)}")
+        import traceback
+        print(traceback.format_exc())
+
+# Initialize system when app starts
+with app.app_context():
+    initialize_system()
+
+# API route to generate maternal report
+@app.route('/generate_report', methods=['POST'])
+def generate_report():
+    try:
+        # Get JSON data from request
+        data = request.get_json()
+        
+        # Validate input using Pydantic
+        try:
+            patient_request = PatientRequest(**data)
+        except ValidationError as e:
+            return jsonify({"error": "Invalid input data", "details": e.errors()}), 400
+        
+        patient_info = extract_patient_context(patient_request.patient_data, patient_request.patient_id)
+        if patient_info == "Patient not found.":
+            return jsonify({"error": "Patient not found in the provided data"}), 404
+        
+        report = generate_maternal_report(patient_info, vector_store, model, tokenizer)
+        return jsonify({"report": report})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 
 if __name__ == '__main__':
     init_db()

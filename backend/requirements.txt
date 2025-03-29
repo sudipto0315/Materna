@@ -3,3 +3,15 @@ SQLAlchemy==2.0.29
 Flask-JWT-Extended==4.6.0
 Werkzeug==3.0.2
 Flask-CORS==4.0.0
+
+pydantic>=2.6.1
+python-multipart>=0.0.7
+torch>=2.2.0
+transformers>=4.38.1
+accelerate>=0.26.0
+sentence-transformers>=2.5.1
+faiss-cpu>=1.7.4
+langchain-core>=0.1.0
+langchain-community>=0.0.24
+langchain-huggingface>=0.1.0
+pypdf>=3.17.1
