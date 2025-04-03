@@ -14,4 +14,7 @@ uvicorn
 pydantic
 torch 
 transformers 
-langchain langchain_community langchain_huggingface faiss-cpu
+langchain 
+langchain_community 
+langchain_huggingface 
+faiss-cpu

@@ -47,11 +47,7 @@ const ViewReportsPage: React.FC = () => {
   });
   const [content, setContent] = useState(originalContent);
 
-  useEffect(() => {
-    if (!isRegistered) {
-      navigate("/register");
-    }
-  }, [isRegistered, navigate]);
+
 
   // Filter reports based on active tab
   const filteredReports = activeTab === "all"
@@ -80,7 +76,6 @@ const ViewReportsPage: React.FC = () => {
         test_name: result.test_name,
         result_value: result.result_value,
         result_unit: result.result_unit,
-        reference_range: result.referenceRange,
         risk_level: result.risk_level,
         direction: result.direction,
         date: medicalReports.find((r) =>

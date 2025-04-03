@@ -149,7 +149,7 @@ const UltrasoundImageUploader: React.FC<UltrasoundImageUploaderProps> = ({ onIma
       const formData = new FormData();
       formData.append('image', selectedImage.file);
       console.log("Sending POST request to /predict");
-      const response = await fetch('/api/predict', {
+      const response = await fetch('http://localhost:3000/predict', {
         method: 'POST',
         body: formData,
       });

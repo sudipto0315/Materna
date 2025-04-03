@@ -145,14 +145,12 @@ const QuestionnaireForm: React.FC = () => {
     weeklyActivity1_2: "1-2 times per week",
     occasionalActivity: "Occasionally",
     neverActivity: "Never",
+    questionnaireSaved: "Questionnaire Saved",
+    questionnaireSuccessfullySaved: "Your health questionnaire has been successfully saved.",
   });
   const [content, setContent] = useState(originalContent);
 
-  useEffect(() => {
-    if (!isRegistered) {
-      navigate("/register");
-    }
-  }, [isRegistered, navigate]);
+
 
   const handleCheckboxGroupChange = (field: string, value: string) => {
     let updatedValues;

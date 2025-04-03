@@ -90,7 +90,8 @@ const Dashboard: React.FC = () => {
   });
   const [content, setContent] = useState(originalContent);
 
-  
+
+
   if (!patientData.lmp) {
     return (
       <Layout>
@@ -190,7 +191,6 @@ const Dashboard: React.FC = () => {
         test_name: result.test_name,
         result_value: result.result_value,
         result_unit: result.result_unit,
-        reference_range: result.reference_range,
         risk_level: result.risk_level,
         direction: result.direction,
         reportDate: report.date,
