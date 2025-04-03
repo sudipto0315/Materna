@@ -18,6 +18,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import ProgressMetrics from "@/components/ProgressMetrics";
 import { FileUp, Upload, AlertTriangle } from "lucide-react";
 import MultiFileUploader, { ReportFile } from "@/components/MultiFileUploader";
+import UltrasoundImageUploader from "@/components/UltrasoundImageUploader";
 
 // AnalysisDisplay Component (unchanged)
 const AnalysisDisplay = ({ result }) => {

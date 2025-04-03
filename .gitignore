@@ -1,3 +1,5 @@
 pregnancy/Model
 pregnancy/node_modules
 backend/venv
+backend/Orientation_RES34.pth
+backend/PLANE_34.pth

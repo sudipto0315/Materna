@@ -3,6 +3,12 @@ SQLAlchemy==2.0.29
 Flask-JWT-Extended==4.6.0
 Werkzeug==3.0.2
 Flask-CORS==4.0.0
+torch>=2.0.0
+pytorch-lightning>=2.0.0
+torchvision>=0.15.0
+pillow>=9.0.0
+flask>=2.0.0
+flask-cors>=3.0.0
 fastapi
 uvicorn 
 pydantic

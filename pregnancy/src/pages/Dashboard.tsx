@@ -90,12 +90,7 @@ const Dashboard: React.FC = () => {
   });
   const [content, setContent] = useState(originalContent);
 
-  useEffect(() => {
-    if (!isRegistered) {
-      navigate("/register");
-    }
-  }, [isRegistered, navigate]);
-
+  
   if (!patientData.lmp) {
     return (
       <Layout>
