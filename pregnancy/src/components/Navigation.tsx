@@ -1,9 +1,9 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useApp } from "@/contexts/AppContext";
-import { useLanguage } from "@/contexts/LanguageContext";
 import { cn } from "@/lib/utils";
 import { Home, User, Upload, FileText, Clipboard, LayoutDashboard, BookOpen, MessageCircle } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface NavigationProps {
   className?: string;

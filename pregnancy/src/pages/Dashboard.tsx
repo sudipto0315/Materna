@@ -12,7 +12,7 @@ import { AlertTriangle, CheckCircle, Info, ArrowUpRight, ArrowDownRight, FileTex
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { jsPDF } from "jspdf"; // Import jsPDF for PDF generation
-import { useLanguage } from "@/contexts/LanguageContext"; // Import useLanguage hook
+import { useLanguage } from "../contexts/LanguageContext"; // Import useLanguage hook
 import axios from "axios";
 
 const Dashboard: React.FC = () => {
