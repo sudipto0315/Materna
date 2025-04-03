@@ -1,6 +1,9 @@
-import React, { useState, useEffect } from "react";
+// src/pages/UploadReports.tsx
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "@/contexts/AppContext";
+import { useLanguage } from "@/contexts/LanguageContext"; // Import useLanguage
+import axios from "axios";
 import { toast } from "@/hooks/use-toast";
 import { uploadFile, calculatePregnancyProgress } from "@/lib/utils";
 import { analyzeReport } from "@/utils/reportAnalysis";
@@ -16,11 +19,10 @@ import ProgressMetrics from "@/components/ProgressMetrics";
 import { FileUp, Upload, AlertTriangle } from "lucide-react";
 import MultiFileUploader, { ReportFile } from "@/components/MultiFileUploader";
 
-// Component to display analysis results with specific handling for blood type, HIV, and hepatitis
+// AnalysisDisplay Component (unchanged)
 const AnalysisDisplay = ({ result }) => {
   if (!result) return null;
 
-  // Helper function to display a specific test result
   const displaySpecificResult = (testName, label) => {
     const testResult = result.all_results.find((r) => r.test_name === testName);
     if (testResult) {
@@ -37,18 +39,14 @@ const AnalysisDisplay = ({ result }) => {
   return (
     <div className="mt-4 p-4 bg-gray-100 rounded">
       <h4 className="font-semibold">Analysis Results</h4>
-      {/* Display specific results for blood type */}
       {result.report_type === "blood-type" && (
         <div>
           {displaySpecificResult("Blood Group", "Blood Group")}
           {displaySpecificResult("Rh Factor", "Rh Factor")}
         </div>
       )}
-      {/* Display specific result for HIV */}
       {result.report_type === "hiv" && displaySpecificResult("HIV Result", "HIV Result")}
-      {/* Display specific result for Hepatitis B */}
       {result.report_type === "hepb" && displaySpecificResult("Hepatitis B Result", "Hepatitis B Result")}
-      {/* General summary for all reports */}
       <p>Total Tests: {result.total_tests}</p>
       <p>Normal Results: {result.normal_results}</p>
       <p>Borderline Results: {result.borderline_results}</p>
@@ -70,7 +68,7 @@ const AnalysisDisplay = ({ result }) => {
   );
 };
 
-// Component for individual report upload and analysis
+// ReportUploadSection Component (modified to accept translated props)
 const ReportUploadSection = ({ reportType, title, category, reportTypeOptions }) => {
   const { patientData, addMedicalReport } = useApp();
   const [date, setDate] = useState(new Date().toISOString().split("T")[0]);
@@ -107,7 +105,7 @@ const ReportUploadSection = ({ reportType, title, category, reportTypeOptions })
       const analysis = await analyzeReport(
         file,
         selectedReportType || reportType,
-        patientData.patient_id, // Updated to use patient_id
+        patientData.patient_id,
         date
       );
       if (analysis.status === "success") {
@@ -204,15 +202,11 @@ const ReportUploadSection = ({ reportType, title, category, reportTypeOptions })
   );
 };
 
+// UploadReportsPage Component (with translation)
 const UploadReportsPage: React.FC = () => {
   const navigate = useNavigate();
-  const {
-    patientData,
-    medicalReports,
-    addMedicalReport,
-    getCategoryReportCount,
-  } = useApp();
-
+  const { patientData, medicalReports, addMedicalReport, getCategoryReportCount } = useApp();
+  const { language } = useLanguage(); // Access language context
   const [activeTab, setActiveTab] = useState("blood");
   const [uploading, setUploading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
@@ -221,7 +215,116 @@ const UploadReportsPage: React.FC = () => {
   const [notes, setNotes] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<ReportFile[]>([]);
 
-  // Map tab name to category
+  // Translation states
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [originalContent] = useState({
+    title: "Upload Medical Reports",
+    patientLabel: "Patient:",
+    timeline: "Pregnancy Timeline",
+    tabs: {
+      blood: "Blood Tests",
+      ultrasound: "Ultrasound Reports",
+      infectious: "Infectious Disease Screening",
+      thyroid: "Thyroid & Genetic Tests",
+      other: "Other Reports",
+    },
+    bloodTestHeader: "Blood Test Reports",
+    bloodCBCReportTitle: "Blood CBC Report",
+    bloodTypingReportTitle: "Blood Typing Report",
+    glucoseFastingReportTitle: "Glucose Fasting Report",
+    ultrasoundHeader: "Ultrasound Reports",
+    ultrasoundTypeLabel: "Ultrasound Type",
+    scanDateLabel: "Scan Date",
+    gestationalAgeLabel: "Gestational Age at Scan (weeks)",
+    notesLabel: "Notes",
+    uploadButton: "Upload Reports",
+    analyzeButton: "Analyze for Risks",
+    infectiousHeader: "Infectious Disease Screening",
+    hivReportTitle: "HIV/AIDS Report",
+    hepBReportTitle: "Hepatitis B Report",
+    thyroidHeader: "Thyroid & Genetic Tests",
+    tshReportTitle: "TSH Report",
+    geneticTestReportTitle: "Genetic Test Report (Optional)",
+    otherHeader: "Other Reports",
+    reportTypeLabel: "Report Type",
+  });
+  const [content, setContent] = useState(originalContent);
+
+  // Translation function
+  const translateText = async (text: string, targetLang: string) => {
+    if (targetLang === 'en') return text;
+    try {
+      const response = await axios.post(
+        `https://translation.googleapis.com/language/translate/v2?key=${import.meta.env.VITE_GOOGLE_API_KEY}`,
+        {
+          q: text,
+          source: 'en',
+          target: targetLang,
+          format: 'text',
+        }
+      );
+      return response.data.data.translations[0].translatedText;
+    } catch (error) {
+      console.error('Translation error:', error);
+      setError('Failed to translate content.');
+      return text;
+    }
+  };
+
+  const translateContent = useCallback(async (targetLang: string) => {
+    setIsLoading(true);
+    setError(null);
+    const translatedContent = { ...originalContent };
+
+    // Translate top-level fields
+    translatedContent.title = await translateText(originalContent.title, targetLang);
+    translatedContent.patientLabel = await translateText(originalContent.patientLabel, targetLang);
+    translatedContent.timeline = await translateText(originalContent.timeline, targetLang);
+    translatedContent.bloodTestHeader = await translateText(originalContent.bloodTestHeader, targetLang);
+    translatedContent.bloodCBCReportTitle = await translateText(originalContent.bloodCBCReportTitle, targetLang);
+    translatedContent.bloodTypingReportTitle = await translateText(originalContent.bloodTypingReportTitle, targetLang);
+    translatedContent.glucoseFastingReportTitle = await translateText(originalContent.glucoseFastingReportTitle, targetLang);
+    translatedContent.ultrasoundHeader = await translateText(originalContent.ultrasoundHeader, targetLang);
+    translatedContent.ultrasoundTypeLabel = await translateText(originalContent.ultrasoundTypeLabel, targetLang);
+    translatedContent.scanDateLabel = await translateText(originalContent.scanDateLabel, targetLang);
+    translatedContent.gestationalAgeLabel = await translateText(originalContent.gestationalAgeLabel, targetLang);
+    translatedContent.notesLabel = await translateText(originalContent.notesLabel, targetLang);
+    translatedContent.uploadButton = await translateText(originalContent.uploadButton, targetLang);
+    translatedContent.analyzeButton = await translateText(originalContent.analyzeButton, targetLang);
+    translatedContent.infectiousHeader = await translateText(originalContent.infectiousHeader, targetLang);
+    translatedContent.hivReportTitle = await translateText(originalContent.hivReportTitle, targetLang);
+    translatedContent.hepBReportTitle = await translateText(originalContent.hepBReportTitle, targetLang);
+    translatedContent.thyroidHeader = await translateText(originalContent.thyroidHeader, targetLang);
+    translatedContent.tshReportTitle = await translateText(originalContent.tshReportTitle, targetLang);
+    translatedContent.geneticTestReportTitle = await translateText(originalContent.geneticTestReportTitle, targetLang);
+    translatedContent.otherHeader = await translateText(originalContent.otherHeader, targetLang);
+    translatedContent.reportTypeLabel = await translateText(originalContent.reportTypeLabel, targetLang);
+
+    // Translate nested tabs
+    translatedContent.tabs = {
+      blood: await translateText(originalContent.tabs.blood, targetLang),
+      ultrasound: await translateText(originalContent.tabs.ultrasound, targetLang),
+      infectious: await translateText(originalContent.tabs.infectious, targetLang),
+      thyroid: await translateText(originalContent.tabs.thyroid, targetLang),
+      other: await translateText(originalContent.tabs.other, targetLang),
+    };
+
+    setContent(translatedContent);
+    setIsLoading(false);
+  }, [originalContent]);
+
+  useEffect(() => {
+    if (language === 'en') {
+      setContent(originalContent);
+      setIsLoading(false);
+      setError(null);
+    } else {
+      translateContent(language);
+    }
+  }, [language, translateContent]);
+
+  // Existing logic (unchanged)
   const categoryMap: Record<string, string> = {
     blood: "blood",
     ultrasound: "ultrasound",
@@ -230,7 +333,6 @@ const UploadReportsPage: React.FC = () => {
     other: "other",
   };
 
-  // Clear selected files and set default report type when changing tabs
   useEffect(() => {
     setSelectedFiles([]);
     const defaultReportTypes: Record<string, string> = {
@@ -305,7 +407,7 @@ const UploadReportsPage: React.FC = () => {
   };
 
   const handleAnalyze = async () => {
-    if (selectedFiles.length === 0 || !patientData.patient_id) { // Updated to use patient_id
+    if (selectedFiles.length === 0 || !patientData.patient_id) {
       toast({
         title: "Cannot analyze report",
         description: "Please select at least one file and ensure your patient information is complete.",
@@ -326,7 +428,7 @@ const UploadReportsPage: React.FC = () => {
         const analysisResults = await analyzeReport(
           selectedFile.file,
           reportType,
-          patientData.patient_id || "unknown", // Updated to use patient_id
+          patientData.patient_id || "unknown",
           reportDate
         );
 
@@ -408,317 +510,291 @@ const UploadReportsPage: React.FC = () => {
   return (
     <Layout>
       <div className="container mx-auto p-6 animate-fade-in">
-        <h1 className="text-2xl font-bold mb-6">Upload Medical Reports</h1>
-
-        <Card className="mb-8">
-          <CardHeader className="bg-blue-50 rounded-t-lg">
-            <CardTitle className="text-xl">
-              Patient: {patientData.firstName} {patientData.lastName}
-            </CardTitle>
-            <CardDescription>ID: {patientData.patient_id}</CardDescription> {/* Updated to use patient_id */}
-          </CardHeader>
-
-          <CardContent className="pt-6">
-            <ProgressMetrics />
-          </CardContent>
-        </Card>
-
-        <div className="mb-8">
-          <h2 className="text-lg font-semibold mb-4">Pregnancy Timeline</h2>
-          <Progress
-            progress={
-              patientData.lmp
-                ? calculatePregnancyProgress(new Date(patientData.lmp))
-                : 0
-            }
-          />
-        </div>
-
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid grid-cols-5 mb-8">
-            <TabsTrigger value="blood">Blood Tests</TabsTrigger>
-            <TabsTrigger value="ultrasound">Ultrasound Reports</TabsTrigger>
-            <TabsTrigger value="infectious">Infectious Disease Screening</TabsTrigger>
-            <TabsTrigger value="thyroid">Thyroid & Genetic Tests</TabsTrigger>
-            <TabsTrigger value="other">Other Reports</TabsTrigger>
-          </TabsList>
-
-          {/* Blood Tests Tab */}
-          <TabsContent value="blood">
-            <h2 className="text-lg font-semibold mb-6">Blood Test Reports</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <ReportUploadSection
-                reportType="cbc"
-                title="Blood CBC Report"
-                category="blood"
-                reportTypeOptions={[
-                  { value: "cbc", label: "Complete Blood Count (CBC)" },
-                  { value: "hemoglobin", label: "Hemoglobin Test" },
-                  { value: "platelet", label: "Platelet Count" },
-                ]}
-              />
-              <ReportUploadSection
-                reportType="blood-type"
-                title="Blood Typing Report"
-                category="blood"
-                reportTypeOptions={[{ value: "blood-type", label: "Blood Typing" }]}
-              />
-              <ReportUploadSection
-                reportType="glucose"
-                title="Glucose Fasting Report"
-                category="blood"
-                reportTypeOptions={[{ value: "glucose", label: "Glucose Fasting Test" }]}
-              />
+        {isLoading ? (
+          <p>Loading translations...</p>
+        ) : error ? (
+          <p>{error}</p>
+        ) : (
+          <>
+            <h1 className="text-2xl font-bold mb-6">{content.title}</h1>
+            <Card className="mb-8">
+              <CardHeader className="bg-blue-50 rounded-t-lg">
+                <CardTitle className="text-xl">
+                  {content.patientLabel} {patientData.firstName} {patientData.lastName}
+                </CardTitle>
+                <CardDescription>ID: {patientData.patient_id}</CardDescription>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <ProgressMetrics />
+              </CardContent>
+            </Card>
+            <div className="mb-8">
+              <h2 className="text-lg font-semibold mb-4">{content.timeline}</h2>
+              <Progress progress={patientData.lmp ? calculatePregnancyProgress(new Date(patientData.lmp)) : 0} />
             </div>
-          </TabsContent>
-
-          {/* Ultrasound Reports Tab */}
-          <TabsContent value="ultrasound">
-            <h2 className="text-lg font-semibold mb-6">Ultrasound Reports</h2>
-            <div className="grid gap-6">
-              <div className="space-y-3">
-                <Label htmlFor="ultrasound-type">Ultrasound Type</Label>
-                <Select
-                  value={reportType}
-                  onValueChange={(value) => setReportType(value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select Ultrasound Type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="dating">Dating Scan</SelectItem>
-                    <SelectItem value="anatomy">Anatomy Scan</SelectItem>
-                    <SelectItem value="growth">Growth Scan</SelectItem>
-                    <SelectItem value="doppler">Doppler Ultrasound</SelectItem>
-                    <SelectItem value="3d-4d">3D/4D Ultrasound</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <MultiFileUploader
-                selectedFiles={selectedFiles}
-                onFilesChange={setSelectedFiles}
-                maxFiles={3}
-                category="ultrasound"
-                usedSlots={getUsedSlots()}
-              />
-
-              <div className="space-y-3">
-                <Label htmlFor="test-date">Scan Date</Label>
-                <Input
-                  id="test-date"
-                  type="date"
-                  value={reportDate}
-                  onChange={(e) => setReportDate(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-3">
-                <Label htmlFor="gestational-age">Gestational Age at Scan (weeks)</Label>
-                <Input
-                  id="gestational-age"
-                  type="number"
-                  placeholder="e.g., 20"
-                />
-              </div>
-
-              <div className="space-y-3">
-                <Label htmlFor="notes">Notes</Label>
-                <Textarea
-                  id="notes"
-                  placeholder="Add any notes about this scan..."
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Button
-                  onClick={handleUpload}
-                  disabled={selectedFiles.length === 0 || uploading || analyzing}
-                  className="materna-button w-full"
-                >
-                  {uploading ? (
-                    <span className="flex items-center gap-2">
-                      <FileUp className="animate-pulse" size={18} />
-                      Uploading...
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-2">
-                      <Upload size={18} />
-                      Upload Reports
-                    </span>
-                  )}
-                </Button>
-
-                <Button
-                  onClick={handleAnalyze}
-                  disabled={selectedFiles.length === 0 || uploading || analyzing}
-                  variant="outline"
-                  className="w-full border-blue-500 text-blue-600 hover:bg-blue-50"
-                >
-                  {analyzing ? (
-                    <span className="flex items-center gap-2">
-                      <FileUp className="animate-pulse" size={18} />
-                      Analyzing...
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-2">
-                      <AlertTriangle size={18} />
-                      Analyze for Risks
-                    </span>
-                  )}
-                </Button>
-              </div>
-            </div>
-          </TabsContent>
-
-          {/* Infectious Disease Screening Tab */}
-          <TabsContent value="infectious">
-            <h2 className="text-lg font-semibold mb-6">Infectious Disease Screening</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <ReportUploadSection
-                reportType="hiv"
-                title="HIV/AIDS Report"
-                category="infectious"
-                reportTypeOptions={[
-                  { value: "hiv", label: "HIV/AIDS Test" },
-                  { value: "hep-c", label: "Hepatitis C Test" },
-                  { value: "hepb", label: "Hepatitis B Test" },
-                ]}
-              />
-              <ReportUploadSection
-                reportType="hepb"
-                title="Hepatitis B Report"
-                category="infectious"
-                reportTypeOptions={[
-                  { value: "hiv", label: "HIV/AIDS Test" },
-                  { value: "hep-c", label: "Hepatitis C Test" },
-                  { value: "hepb", label: "Hepatitis B Test" },
-                ]}
-              />
-            </div>
-          </TabsContent>
-
-          {/* Thyroid & Genetic Tests Tab */}
-          <TabsContent value="thyroid">
-            <h2 className="text-lg font-semibold mb-6">Thyroid & Genetic Tests</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <ReportUploadSection
-                reportType="tsh"
-                title="TSH Report"
-                category="thyroid"
-                reportTypeOptions={[
-                  { value: "tsh", label: "Thyroid-Stimulating Hormone (TSH)" },
-                  { value: "t4", label: "Thyroxine (T4)" },
-                  { value: "t3", label: "Triiodothyronine (T3)" },
-                ]}
-              />
-              <ReportUploadSection
-                reportType="nips"
-                title="Genetic Test Report (Optional)"
-                category="thyroid"
-                reportTypeOptions={[
-                  { value: "nips", label: "Non-Invasive Prenatal Screening (NIPS)" },
-                  { value: "nipt", label: "Non-Invasive Prenatal Testing (NIPT)" },
-                  { value: "cfdna", label: "Cell-Free DNA Screening" },
-                  { value: "carrier", label: "Carrier Screening" },
-                  { value: "amnio", label: "Amniocentesis Results" },
-                  { value: "cvs", label: "Chorionic Villus Sampling (CVS) Results" },
-                ]}
-              />
-            </div>
-          </TabsContent>
-
-          {/* Other Reports Tab */}
-          <TabsContent value="other">
-            <h2 className="text-lg font-semibold mb-6">Other Reports</h2>
-            <div className="grid gap-6">
-              <div className="space-y-3">
-                <Label htmlFor="other-report-type">Report Type</Label>
-                <Input
-                  id="other-report-type"
-                  placeholder="Enter report type..."
-                  value={reportType}
-                  onChange={(e) => setReportType(e.target.value)}
-                />
-              </div>
-
-              <MultiFileUploader
-                selectedFiles={selectedFiles}
-                onFilesChange={setSelectedFiles}
-                maxFiles={3}
-                category="other"
-                usedSlots={getUsedSlots()}
-              />
-
-              <div className="space-y-3">
-                <Label htmlFor="report-date">Report Date</Label>
-                <Input
-                  id="report-date"
-                  type="date"
-                  value={reportDate}
-                  onChange={(e) => setReportDate(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-3">
-                <Label htmlFor="notes">Notes</Label>
-                <Textarea
-                  id="notes"
-                  placeholder="Add any notes about this report..."
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Button
-                  onClick={handleUpload}
-                  disabled={selectedFiles.length === 0 || uploading || analyzing}
-                  className="materna-button w-full"
-                >
-                  {uploading ? (
-                    <span className="flex items-center gap-2">
-                      <FileUp className="animate-pulse" size={18} />
-                      Uploading...
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-2">
-                      <Upload size={18} />
-                      Upload Reports
-                    </span>
-                  )}
-                </Button>
-
-                <Button
-                  onClick={handleAnalyze}
-                  disabled={selectedFiles.length === 0 || uploading || analyzing}
-                  variant="outline"
-                  className="w-full border-blue-500 text-blue-600 hover:bg-blue-50"
-                >
-                  {analyzing ? (
-                    <span className="flex items-center gap-2">
-                      <FileUp className="animate-pulse" size={18} />
-                      Analyzing...
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-2">
-                      <AlertTriangle size={18} />
-                      Analyze for Risks
-                    </span>
-                  )}
-                </Button>
-              </div>
-            </div>
-          </TabsContent>
-        </Tabs>
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <TabsList className="grid grid-cols-5 mb-8">
+                <TabsTrigger value="blood">{content.tabs.blood}</TabsTrigger>
+                <TabsTrigger value="ultrasound">{content.tabs.ultrasound}</TabsTrigger>
+                <TabsTrigger value="infectious">{content.tabs.infectious}</TabsTrigger>
+                <TabsTrigger value="thyroid">{content.tabs.thyroid}</TabsTrigger>
+                <TabsTrigger value="other">{content.tabs.other}</TabsTrigger>
+              </TabsList>
+              <TabsContent value="blood">
+                <h2 className="text-lg font-semibold mb-6">{content.bloodTestHeader}</h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <ReportUploadSection
+                    reportType="cbc"
+                    title={content.bloodCBCReportTitle}
+                    category="blood"
+                    reportTypeOptions={[
+                      { value: "cbc", label: "Complete Blood Count (CBC)" },
+                      { value: "hemoglobin", label: "Hemoglobin Test" },
+                      { value: "platelet", label: "Platelet Count" },
+                    ]}
+                  />
+                  <ReportUploadSection
+                    reportType="blood-type"
+                    title={content.bloodTypingReportTitle}
+                    category="blood"
+                    reportTypeOptions={[{ value: "blood-type", label: "Blood Typing" }]}
+                  />
+                  <ReportUploadSection
+                    reportType="glucose"
+                    title={content.glucoseFastingReportTitle}
+                    category="blood"
+                    reportTypeOptions={[{ value: "glucose", label: "Glucose Fasting Test" }]}
+                  />
+                </div>
+              </TabsContent>
+              <TabsContent value="ultrasound">
+                <h2 className="text-lg font-semibold mb-6">{content.ultrasoundHeader}</h2>
+                <div className="grid gap-6">
+                  <div className="space-y-3">
+                    <Label htmlFor="ultrasound-type">{content.ultrasoundTypeLabel}</Label>
+                    <Select value={reportType} onValueChange={(value) => setReportType(value)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select Ultrasound Type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="dating">Dating Scan</SelectItem>
+                        <SelectItem value="anatomy">Anatomy Scan</SelectItem>
+                        <SelectItem value="growth">Growth Scan</SelectItem>
+                        <SelectItem value="doppler">Doppler Ultrasound</SelectItem>
+                        <SelectItem value="3d-4d">3D/4D Ultrasound</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <MultiFileUploader
+                    selectedFiles={selectedFiles}
+                    onFilesChange={setSelectedFiles}
+                    maxFiles={3}
+                    category="ultrasound"
+                    usedSlots={getUsedSlots()}
+                  />
+                  <div className="space-y-3">
+                    <Label htmlFor="test-date">{content.scanDateLabel}</Label>
+                    <Input
+                      id="test-date"
+                      type="date"
+                      value={reportDate}
+                      onChange={(e) => setReportDate(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-3">
+                    <Label htmlFor="gestational-age">{content.gestationalAgeLabel}</Label>
+                    <Input
+                      id="gestational-age"
+                      type="number"
+                      placeholder="e.g., 20"
+                    />
+                  </div>
+                  <div className="space-y-3">
+                    <Label htmlFor="notes">{content.notesLabel}</Label>
+                    <Textarea
+                      id="notes"
+                      placeholder="Add any notes about this scan..."
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Button
+                      onClick={handleUpload}
+                      disabled={selectedFiles.length === 0 || uploading || analyzing}
+                      className="materna-button w-full"
+                    >
+                      {uploading ? (
+                        <span className="flex items-center gap-2">
+                          <FileUp className="animate-pulse" size={18} />
+                          Uploading...
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-2">
+                          <Upload size={18} />
+                          {content.uploadButton}
+                        </span>
+                      )}
+                    </Button>
+                    <Button
+                      onClick={handleAnalyze}
+                      disabled={selectedFiles.length === 0 || uploading || analyzing}
+                      variant="outline"
+                      className="w-full border-blue-500 text-blue-600 hover:bg-blue-50"
+                    >
+                      {analyzing ? (
+                        <span className="flex items-center gap-2">
+                          <FileUp className="animate-pulse" size={18} />
+                          Analyzing...
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-2">
+                          <AlertTriangle size={18} />
+                          {content.analyzeButton}
+                        </span>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </TabsContent>
+              <TabsContent value="infectious">
+                <h2 className="text-lg font-semibold mb-6">{content.infectiousHeader}</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <ReportUploadSection
+                    reportType="hiv"
+                    title={content.hivReportTitle}
+                    category="infectious"
+                    reportTypeOptions={[
+                      { value: "hiv", label: "HIV/AIDS Test" },
+                      { value: "hep-c", label: "Hepatitis C Test" },
+                      { value: "hepb", label: "Hepatitis B Test" },
+                    ]}
+                  />
+                  <ReportUploadSection
+                    reportType="hepb"
+                    title={content.hepBReportTitle}
+                    category="infectious"
+                    reportTypeOptions={[
+                      { value: "hiv", label: "HIV/AIDS Test" },
+                      { value: "hep-c", label: "Hepatitis C Test" },
+                      { value: "hepb", label: "Hepatitis B Test" },
+                    ]}
+                  />
+                </div>
+              </TabsContent>
+              <TabsContent value="thyroid">
+                <h2 className="text-lg font-semibold mb-6">{content.thyroidHeader}</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <ReportUploadSection
+                    reportType="tsh"
+                    title={content.tshReportTitle}
+                    category="thyroid"
+                    reportTypeOptions={[
+                      { value: "tsh", label: "Thyroid-Stimulating Hormone (TSH)" },
+                      { value: "t4", label: "Thyroxine (T4)" },
+                      { value: "t3", label: "Triiodothyronine (T3)" },
+                    ]}
+                  />
+                  <ReportUploadSection
+                    reportType="nips"
+                    title={content.geneticTestReportTitle}
+                    category="thyroid"
+                    reportTypeOptions={[
+                      { value: "nips", label: "Non-Invasive Prenatal Screening (NIPS)" },
+                      { value: "nipt", label: "Non-Invasive Prenatal Testing (NIPT)" },
+                      { value: "cfdna", label: "Cell-Free DNA Screening" },
+                      { value: "carrier", label: "Carrier Screening" },
+                      { value: "amnio", label: "Amniocentesis Results" },
+                      { value: "cvs", label: "Chorionic Villus Sampling (CVS) Results" },
+                    ]}
+                  />
+                </div>
+              </TabsContent>
+              <TabsContent value="other">
+                <h2 className="text-lg font-semibold mb-6">{content.otherHeader}</h2>
+                <div className="grid gap-6">
+                  <div className="space-y-3">
+                    <Label htmlFor="other-report-type">{content.reportTypeLabel}</Label>
+                    <Input
+                      id="other-report-type"
+                      placeholder="Enter report type..."
+                      value={reportType}
+                      onChange={(e) => setReportType(e.target.value)}
+                    />
+                  </div>
+                  <MultiFileUploader
+                    selectedFiles={selectedFiles}
+                    onFilesChange={setSelectedFiles}
+                    maxFiles={3}
+                    category="other"
+                    usedSlots={getUsedSlots()}
+                  />
+                  <div className="space-y-3">
+                    <Label htmlFor="report-date">{content.scanDateLabel}</Label>
+                    <Input
+                      id="report-date"
+                      type="date"
+                      value={reportDate}
+                      onChange={(e) => setReportDate(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-3">
+                    <Label htmlFor="notes">{content.notesLabel}</Label>
+                    <Textarea
+                      id="notes"
+                      placeholder="Add any notes about this report..."
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Button
+                      onClick={handleUpload}
+                      disabled={selectedFiles.length === 0 || uploading || analyzing}
+                      className="materna-button w-full"
+                    >
+                      {uploading ? (
+                        <span className="flex items-center gap-2">
+                          <FileUp className="animate-pulse" size={18} />
+                          Uploading...
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-2">
+                          <Upload size={18} />
+                          {content.uploadButton}
+                        </span>
+                      )}
+                    </Button>
+                    <Button
+                      onClick={handleAnalyze}
+                      disabled={selectedFiles.length === 0 || uploading || analyzing}
+                      variant="outline"
+                      className="w-full border-blue-500 text-blue-600 hover:bg-blue-50"
+                    >
+                      {analyzing ? (
+                        <span className="flex items-center gap-2">
+                          <FileUp className="animate-pulse" size={18} />
+                          Analyzing...
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-2">
+                          <AlertTriangle size={18} />
+                          {content.analyzeButton}
+                        </span>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
+          </>
+        )}
       </div>
     </Layout>
   );
 };
 
-// Helper Component for Pregnancy Progress
+// Progress Component (unchanged)
 const Progress: React.FC<{ progress: number }> = ({ progress }) => {
   return (
     <div className="w-full bg-gray-200 rounded-full h-2.5 mb-4">

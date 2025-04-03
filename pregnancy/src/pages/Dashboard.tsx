@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useApp } from "@/contexts/AppContext";
 import { calculateGestationalAge, calculatePregnancyProgress, daysUntilDueDate, getTrimester } from "@/lib/utils";
@@ -12,6 +12,8 @@ import { AlertTriangle, CheckCircle, Info, ArrowUpRight, ArrowDownRight, FileTex
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { jsPDF } from "jspdf"; // Import jsPDF for PDF generation
+import { useLanguage } from "@/contexts/LanguageContext"; // Import useLanguage hook
+import axios from "axios";
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -21,6 +23,72 @@ const Dashboard: React.FC = () => {
     questionnaireCompleted, 
     medicalReports 
   } = useApp();
+  const { language } = useLanguage(); // Access language context from navigation bar
+
+  // Translation states
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [originalContent] = useState({
+    pageTitle: "Pregnancy Health Dashboard",
+    progressTitle: "Pregnancy Progress",
+    progressDescription: "Currently {progress}% through your pregnancy",
+    reportsSummaryTitle: "Medical Reports Summary",
+    normalLabel: "Normal",
+    borderlineLabel: "Borderline",
+    highRiskLabel: "High Risk",
+    reportsUploaded: "You have uploaded {count} medical reports.",
+    viewReportsButton: "View All Reports",
+    downloadReportButton: "Download Detailed Patient Report",
+    healthSummaryTab: "Health Summary",
+    riskAssessmentTab: "Risk Assessment",
+    testResultsTab: "Test Results Analysis",
+    recommendationsTab: "Recommendations",
+    healthIndicatorsTitle: "Health Indicators",
+    bmiTitle: "Body Mass Index (BMI)",
+    bmiNormal: "Current BMI: {bmi} - Normal",
+    prePregnancyWeight: "Pre-pregnancy weight: {weight} kg",
+    currentWeight: "Current weight: {weight} kg",
+    heightLabel: "Height: {height} cm",
+    incompleteProfile: "Please complete your health profile to see BMI calculations.",
+    noReportsUploaded: "No medical reports have been uploaded yet.",
+    uploadReportsPrompt: "Please upload your medical reports to see health indicators.",
+    uploadReportsButton: "Upload Reports",
+    riskAssessmentTitle: "Pregnancy Risk Assessment",
+    insufficientData: "Insufficient data for risk assessment.",
+    completeQuestionnairePrompt: "Please upload medical reports and complete the health questionnaire for risk assessment.",
+    completeQuestionnaireButton: "Complete Questionnaire",
+    identifiedRiskFactors: "Identified Risk Factors",
+    viewAllRiskFactors: "View all {count} risk factors",
+    noRiskFactors: "No significant risk factors identified from your test results.",
+    testResultsTitle: "Test Results Analysis",
+    noTestResults: "No test result risk factors have been identified yet.",
+    uploadTestResultsPrompt: "This section will display any abnormal test results after you upload and analyze your medical reports.",
+    viewDetailedAnalysis: "View Detailed Analysis",
+    recommendationsTitle: "Recommendations and Next Steps",
+    highRiskAlert: "Alert: High-risk factors have been detected in your test reports. It is strongly recommended to consult your doctor as soon as possible.",
+    thirdTrimesterTitle: "3rd Trimester Essentials",
+    thirdTrimesterItem1: "Prepare for labor and delivery (birth plan, hospital bag)",
+    thirdTrimesterItem2: "Monitor fetal movement daily",
+    thirdTrimesterItem3: "Complete your baby preparations (car seat, nursery)",
+    thirdTrimesterItem4: "Consider breastfeeding education if planning to breastfeed",
+    thirdTrimesterItem5: "Discuss labor signs and when to go to the hospital with your provider",
+    secondTrimesterTitle: "2nd Trimester Recommendations",
+    secondTrimesterItem1: "Schedule your 20-week anatomy scan",
+    secondTrimesterItem2: "Begin prenatal education classes",
+    secondTrimesterItem3: "Continue taking prenatal vitamins",
+    secondTrimesterItem4: "Stay physically active with pregnancy-safe exercises",
+    secondTrimesterItem5: "Begin planning for maternity leave and childcare",
+    firstTrimesterTitle: "1st Trimester Recommendations",
+    firstTrimesterItem1: "Schedule your first prenatal appointment",
+    firstTrimesterItem2: "Begin taking prenatal vitamins with folic acid",
+    firstTrimesterItem3: "Avoid alcohol, smoking, and limit caffeine",
+    firstTrimesterItem4: "Stay hydrated and get plenty of rest",
+    firstTrimesterItem5: "Consider first trimester screening tests",
+    downloadSummaryButton: "Download Summary JSON",
+    updateRegistration: "Update Registration",
+    registrationIssue: "There seems to be an issue with your registration data. Please update your information.",
+  });
+  const [content, setContent] = useState(originalContent);
 
   useEffect(() => {
     if (!isRegistered) {
@@ -34,11 +102,11 @@ const Dashboard: React.FC = () => {
         <div className="container mx-auto p-8">
           <div className="bg-yellow-50 border-l-4 border-yellow-400 p-6 rounded-md">
             <p className="text-yellow-700">
-              There seems to be an issue with your registration data. Please update your information.
+              {content.registrationIssue}
             </p>
             <Link to="/register" className="mt-4 inline-block">
               <Button variant="outline" className="mt-2">
-                Update Registration
+                {content.updateRegistration}
               </Button>
             </Link>
           </div>
@@ -86,21 +154,21 @@ const Dashboard: React.FC = () => {
         return (
           <Badge variant="destructive" className="flex gap-1 items-center">
             <AlertTriangle size={12} />
-            High Risk
+            {content.highRiskLabel}
           </Badge>
         );
       case "borderline":
         return (
           <Badge variant="default" className="flex gap-1 items-center bg-yellow-500">
             <Info size={12} />
-            Borderline
+            {content.borderlineLabel}
           </Badge>
         );
       case "normal":
         return (
           <Badge variant="outline" className="flex gap-1 items-center text-green-600 border-green-600">
             <CheckCircle size={12} />
-            Normal
+            {content.normalLabel}
           </Badge>
         );
       default:
@@ -277,308 +345,361 @@ Pre-pregnancy Weight: 60 kg
     }
   };
 
+  // Translation function
+  const translateText = async (text: string, targetLang: string) => {
+    if (targetLang === "en") return text;
+    try {
+      const response = await axios.post(
+        `https://translation.googleapis.com/language/translate/v2?key=${import.meta.env.VITE_GOOGLE_API_KEY}`,
+        {
+          q: text,
+          source: "en",
+          target: targetLang,
+          format: "text",
+        }
+      );
+      return response.data.data.translations[0].translatedText;
+    } catch (error) {
+      console.error("Translation error:", error);
+      setError("Failed to translate content.");
+      return text;
+    }
+  };
+
+  // Translate content based on language
+  const translateContent = useCallback(async (targetLang: string) => {
+    setIsLoading(true);
+    setError(null);
+    const translatedContent = { ...originalContent };
+
+    // Translate all fields
+    for (const key in originalContent) {
+      translatedContent[key as keyof typeof originalContent] = await translateText(
+        originalContent[key as keyof typeof originalContent],
+        targetLang
+      );
+    }
+
+    setContent(translatedContent);
+    setIsLoading(false);
+  }, [originalContent]);
+
+  useEffect(() => {
+    if (language === "en") {
+      setContent(originalContent);
+      setIsLoading(false);
+      setError(null);
+    } else {
+      translateContent(language);
+    }
+  }, [language, translateContent]);
+
   return (
     <Layout>
       <div className="container mx-auto p-6 animate-fade-in">
-        <h1 className="text-3xl font-bold mb-8 text-gray-800">Pregnancy Health Dashboard</h1>
-        
-        <ProgressMetrics />
-        
-        <div className="mt-6 mb-8">
-          <h2 className="text-xl font-semibold mb-4">Pregnancy Progress</h2>
-          <p className="text-sm text-gray-500 mb-2">Currently {progress}% through your pregnancy</p>
-          <Progress value={progress} className="h-2" />
-        </div>
+        {isLoading ? (
+          <p>Loading translations...</p>
+        ) : error ? (
+          <p>{error}</p>
+        ) : (
+          <>
+            <h1 className="text-3xl font-bold mb-8 text-gray-800">{content.pageTitle}</h1>
+            
+            <ProgressMetrics />
+            
+            <div className="mt-6 mb-8">
+              <h2 className="text-xl font-semibold mb-4">{content.progressTitle}</h2>
+              <p className="text-sm text-gray-500 mb-2">{content.progressDescription.replace("{progress}", progress.toString())}</p>
+              <Progress value={progress} className="h-2" />
+            </div>
 
-        {medicalReports.length > 0 && (
-          <Card className="mb-8">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg">Medical Reports Summary</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-3 mb-4">
-                <Badge variant="outline" className="flex gap-1 text-green-600 border-green-600">
-                  <CheckCircle size={12} />
-                  {testResultCounts.normal} Normal
-                </Badge>
-                {testResultCounts.borderline > 0 && (
-                  <Badge variant="default" className="flex gap-1 bg-yellow-500">
-                    <Info size={12} />
-                    {testResultCounts.borderline} Borderline
-                  </Badge>
-                )}
-                {testResultCounts.high_risk > 0 && (
-                  <Badge variant="destructive" className="flex gap-1">
-                    <AlertTriangle size={12} />
-                    {testResultCounts.high_risk} High Risk
-                  </Badge>
-                )}
-              </div>
-              
-              <div className="text-sm text-gray-500 mb-2">
-                You have uploaded {medicalReports.length} medical reports.
-              </div>
-              
-              <div className="flex gap-2 mt-2">
-                <Link to="/view-reports">
-                  <Button variant="outline" size="sm">
-                    <FileText className="mr-2 h-4 w-4" />
-                    View All Reports
-                  </Button>
-                </Link>
-                <Button variant="outline" size="sm" onClick={handleDownloadReport}>
-                  <Download className="mr-2 h-4 w-4" />
-                  Download Detailed Patient Report
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-        
-        <Tabs defaultValue="health" className="mt-8">
-          <TabsList className="mb-6">
-            <TabsTrigger value="health">Health Summary</TabsTrigger>
-            <TabsTrigger value="risk">Risk Assessment</TabsTrigger>
-            <TabsTrigger value="tests">Test Results Analysis</TabsTrigger>
-            <TabsTrigger value="recommendations">Recommendations</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="health" className="space-y-6">
-            <div className="bg-white rounded-xl shadow-md p-6">
-              <h3 className="text-lg font-medium mb-4">Health Indicators</h3>
-              
-              <div className="space-y-6">
-                <div>
-                  <h4 className="text-md font-medium mb-1">Body Mass Index (BMI)</h4>
-                  {patientData.height && patientData.currentWeight ? (
-                    <>
-                      <p className="mb-2">
-                        Current BMI: <span className="font-semibold text-green-600">
-                          {(patientData.currentWeight / Math.pow(patientData.height / 100, 2)).toFixed(1)}
-                        </span> - Normal
-                      </p>
-                      <p className="text-sm text-gray-500">Pre-pregnancy weight: {patientData.preWeight} kg</p>
-                      <p className="text-sm text-gray-500">Current weight: {patientData.currentWeight} kg</p>
-                      <p className="text-sm text-gray-500">Height: {patientData.height} cm</p>
-                    </>
-                  ) : (
-                    <p className="text-yellow-600">Please complete your health profile to see BMI calculations.</p>
-                  )}
-                </div>
-                
-                {medicalReports.length === 0 && (
-                  <div className="bg-yellow-50 p-4 rounded-md">
-                    <p className="text-yellow-700">No medical reports have been uploaded yet.</p>
-                    <p className="text-sm mt-2">Please upload your medical reports to see health indicators.</p>
-                    <Link to="/upload-reports">
-                      <Button variant="outline" size="sm" className="mt-2">
-                        Upload Reports
+            {medicalReports.length > 0 && (
+              <Card className="mb-8">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg">{content.reportsSummaryTitle}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-3 mb-4">
+                    <Badge variant="outline" className="flex gap-1 text-green-600 border-green-600">
+                      <CheckCircle size={12} />
+                      {testResultCounts.normal} {content.normalLabel}
+                    </Badge>
+                    {testResultCounts.borderline > 0 && (
+                      <Badge variant="default" className="flex gap-1 bg-yellow-500">
+                        <Info size={12} />
+                        {testResultCounts.borderline} {content.borderlineLabel}
+                      </Badge>
+                    )}
+                    {testResultCounts.high_risk > 0 && (
+                      <Badge variant="destructive" className="flex gap-1">
+                        <AlertTriangle size={12} />
+                        {testResultCounts.high_risk} {content.highRiskLabel}
+                      </Badge>
+                    )}
+                  </div>
+                  
+                  <div className="text-sm text-gray-500 mb-2">
+                    {content.reportsUploaded.replace("{count}", medicalReports.length.toString())}
+                  </div>
+                  
+                  <div className="flex gap-2 mt-2">
+                    <Link to="/view-reports">
+                      <Button variant="outline" size="sm">
+                        <FileText className="mr-2 h-4 w-4" />
+                        {content.viewReportsButton}
                       </Button>
                     </Link>
+                    <Button variant="outline" size="sm" onClick={handleDownloadReport}>
+                      <Download className="mr-2 h-4 w-4" />
+                      {content.downloadReportButton}
+                    </Button>
                   </div>
-                )}
-              </div>
-            </div>
-          </TabsContent>
-          
-          <TabsContent value="risk" className="space-y-6">
-            <div className="bg-white rounded-xl shadow-md p-6">
-              <h3 className="text-lg font-medium mb-4">Pregnancy Risk Assessment</h3>
+                </CardContent>
+              </Card>
+            )}
+            
+            <Tabs defaultValue="health" className="mt-8">
+              <TabsList className="mb-6">
+                <TabsTrigger value="health">{content.healthSummaryTab}</TabsTrigger>
+                <TabsTrigger value="risk">{content.riskAssessmentTab}</TabsTrigger>
+                <TabsTrigger value="tests">{content.testResultsTab}</TabsTrigger>
+                <TabsTrigger value="recommendations">{content.recommendationsTab}</TabsTrigger>
+              </TabsList>
               
-              {!questionnaireCompleted || medicalReports.length === 0 ? (
-                <div className="bg-yellow-50 p-4 rounded-md">
-                  <p className="text-yellow-700">Insufficient data for risk assessment.</p>
-                  <p className="text-sm mt-2">
-                    Please upload medical reports and complete the health questionnaire for risk assessment.
-                  </p>
-                  <div className="flex gap-2 mt-2">
-                    {!questionnaireCompleted && (
-                      <Link to="/questionnaire">
-                        <Button variant="outline" size="sm">
-                          Complete Questionnaire
-                        </Button>
-                      </Link>
-                    )}
-                    {medicalReports.length === 0 && (
-                      <Link to="/upload-reports">
-                        <Button variant="outline" size="sm">
-                          Upload Reports
-                        </Button>
-                      </Link>
-                    )}
-                  </div>
-                </div>
-              ) : allRiskFactors.length > 0 ? (
-                <div className="space-y-4">
-                  <h4 className="text-md font-medium">Identified Risk Factors</h4>
-                  <div className="space-y-2">
-                    {allRiskFactors.slice(0, 5).map((risk, idx) => (
-                      <div key={idx} className="p-2 rounded bg-gray-50 text-sm flex items-center justify-between">
-                        <div className="flex items-center gap-1">
-                          <DirectionIndicator direction={risk.direction} />
-                          <span className="font-medium">{risk.test_name}:</span> 
-                          <span>{risk.result_value} {risk.result_unit}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-500">Ref: {risk.reference_range}</span>
-                          <RiskBadge riskLevel={risk.risk_level} />
-                        </div>
-                      </div>
-                    ))}
+              <TabsContent value="health" className="space-y-6">
+                <div className="bg-white rounded-xl shadow-md p-6">
+                  <h3 className="text-lg font-medium mb-4">{content.healthIndicatorsTitle}</h3>
+                  
+                  <div className="space-y-6">
+                    <div>
+                      <h4 className="text-md font-medium mb-1">{content.bmiTitle}</h4>
+                      {patientData.height && patientData.currentWeight ? (
+                        <>
+                          <p className="mb-2">
+                            {content.bmiNormal.replace("{bmi}", (patientData.currentWeight / Math.pow(patientData.height / 100, 2)).toFixed(1))}
+                          </p>
+                          <p className="text-sm text-gray-500">{content.prePregnancyWeight.replace("{weight}", patientData.preWeight.toString())}</p>
+                          <p className="text-sm text-gray-500">{content.currentWeight.replace("{weight}", patientData.currentWeight.toString())}</p>
+                          <p className="text-sm text-gray-500">{content.heightLabel.replace("{height}", patientData.height.toString())}</p>
+                        </>
+                      ) : (
+                        <p className="text-yellow-600">{content.incompleteProfile}</p>
+                      )}
+                    </div>
                     
-                    {allRiskFactors.length > 5 && (
-                      <Link to="/view-reports" className="text-sm text-materna-600 block mt-2">
-                        View all {allRiskFactors.length} risk factors
-                      </Link>
+                    {medicalReports.length === 0 && (
+                      <div className="bg-yellow-50 p-4 rounded-md">
+                        <p className="text-yellow-700">{content.noReportsUploaded}</p>
+                        <p className="text-sm mt-2">{content.uploadReportsPrompt}</p>
+                        <Link to="/upload-reports">
+                          <Button variant="outline" size="sm" className="mt-2">
+                            {content.uploadReportsButton}
+                          </Button>
+                        </Link>
+                      </div>
                     )}
                   </div>
                 </div>
-              ) : (
-                <p className="text-green-600">No significant risk factors identified from your test results.</p>
-              )}
-            </div>
-          </TabsContent>
-          
-          <TabsContent value="tests" className="space-y-6">
-            <div className="bg-white rounded-xl shadow-md p-6">
-              <h3 className="text-lg font-medium mb-4">Test Results Analysis</h3>
+              </TabsContent>
               
-              {medicalReports.length === 0 ? (
-                <div className="bg-yellow-50 p-4 rounded-md">
-                  <p className="text-yellow-700">No test result risk factors have been identified yet.</p>
-                  <p className="text-sm mt-2">
-                    This section will display any abnormal test results after you upload and analyze your medical reports.
-                  </p>
-                  <Link to="/upload-reports">
-                    <Button variant="outline" size="sm" className="mt-2">
-                      Upload Reports
-                    </Button>
-                  </Link>
+              <TabsContent value="risk" className="space-y-6">
+                <div className="bg-white rounded-xl shadow-md p-6">
+                  <h3 className="text-lg font-medium mb-4">{content.riskAssessmentTitle}</h3>
+                  
+                  {!questionnaireCompleted || medicalReports.length === 0 ? (
+                    <div className="bg-yellow-50 p-4 rounded-md">
+                      <p className="text-yellow-700">{content.insufficientData}</p>
+                      <p className="text-sm mt-2">
+                        {content.completeQuestionnairePrompt}
+                      </p>
+                      <div className="flex gap-2 mt-2">
+                        {!questionnaireCompleted && (
+                          <Link to="/questionnaire">
+                            <Button variant="outline" size="sm">
+                              {content.completeQuestionnaireButton}
+                            </Button>
+                          </Link>
+                        )}
+                        {medicalReports.length === 0 && (
+                          <Link to="/upload-reports">
+                            <Button variant="outline" size="sm">
+                              {content.uploadReportsButton}
+                            </Button>
+                          </Link>
+                        )}
+                      </div>
+                    </div>
+                  ) : allRiskFactors.length > 0 ? (
+                    <div className="space-y-4">
+                      <h4 className="text-md font-medium">{content.identifiedRiskFactors}</h4>
+                      <div className="space-y-2">
+                        {allRiskFactors.slice(0, 5).map((risk, idx) => (
+                          <div key={idx} className="p-2 rounded bg-gray-50 text-sm flex items-center justify-between">
+                            <div className="flex items-center gap-1">
+                              <DirectionIndicator direction={risk.direction} />
+                              <span className="font-medium">{risk.test_name}:</span> 
+                              <span>{risk.result_value} {risk.result_unit}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-500">Ref: {risk.reference_range}</span>
+                              <RiskBadge riskLevel={risk.risk_level} />
+                            </div>
+                          </div>
+                        ))}
+                        
+                        {allRiskFactors.length > 5 && (
+                          <Link to="/view-reports" className="text-sm text-materna-600 block mt-2">
+                            {content.viewAllRiskFactors.replace("{count}", allRiskFactors.length.toString())}
+                          </Link>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-green-600">{content.noRiskFactors}</p>
+                  )}
                 </div>
-              ) : testResultCounts.high_risk === 0 && testResultCounts.borderline === 0 ? (
-                <p className="text-green-600">All test results are within normal range.</p>
-              ) : (
-                <div>
-                  <p className="mb-4">
-                    Your reports show {testResultCounts.high_risk + testResultCounts.borderline} abnormal test results
-                    that may require attention.
-                  </p>
-                  <Link to="/view-reports">
-                    <Button variant="outline" size="sm">
-                      View Detailed Analysis
-                    </Button>
-                  </Link>
-                </div>
-              )}
-            </div>
-          </TabsContent>
-          
-          <TabsContent value="recommendations" className="space-y-6">
-            <div className="bg-white rounded-xl shadow-md p-6">
-              <h3 className="text-lg font-medium mb-4">Recommendations and Next Steps</h3>
+              </TabsContent>
               
-              {testResultCounts.high_risk > 0 && (
-                <div className="bg-red-100 border-l-4 border-red-500 p-4 mb-6 rounded-md">
-                  <p className="text-red-700 font-medium">
-                    Alert: High-risk factors have been detected in your test reports. 
-                    It is strongly recommended to consult your doctor as soon as possible.
-                  </p>
+              <TabsContent value="tests" className="space-y-6">
+                <div className="bg-white rounded-xl shadow-md p-6">
+                  <h3 className="text-lg font-medium mb-4">{content.testResultsTitle}</h3>
+                  
+                  {medicalReports.length === 0 ? (
+                    <div className="bg-yellow-50 p-4 rounded-md">
+                      <p className="text-yellow-700">{content.noTestResults}</p>
+                      <p className="text-sm mt-2">
+                        {content.uploadTestResultsPrompt}
+                      </p>
+                      <Link to="/upload-reports">
+                        <Button variant="outline" size="sm" className="mt-2">
+                          {content.uploadReportsButton}
+                        </Button>
+                      </Link>
+                    </div>
+                  ) : testResultCounts.high_risk === 0 && testResultCounts.borderline === 0 ? (
+                    <p className="text-green-600">{content.noTestResults}</p>
+                  ) : (
+                    <div>
+                      <p className="mb-4">
+                        {content.noTestResults.replace("{count}", (testResultCounts.high_risk + testResultCounts.borderline).toString())}
+                      </p>
+                      <Link to="/view-reports">
+                        <Button variant="outline" size="sm">
+                          {content.viewDetailedAnalysis}
+                        </Button>
+                      </Link>
+                    </div>
+                  )}
                 </div>
-              )}
+              </TabsContent>
               
-              {trimester === 3 && (
-                <div>
-                  <h4 className="text-md font-medium mb-3">3rd Trimester Essentials</h4>
-                  <ul className="space-y-4">
-                    <li className="flex items-start">
-                      <span className="text-materna-500 mr-2">•</span>
-                      <span>Prepare for labor and delivery (birth plan, hospital bag)</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="text-materna-500 mr-2">•</span>
-                      <span>Monitor fetal movement daily</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="text-materna-500 mr-2">•</span>
-                      <span>Complete your baby preparations (car seat, nursery)</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="text-materna-500 mr-2">•</span>
-                      <span>Consider breastfeeding education if planning to breastfeed</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="text-materna-500 mr-2">•</span>
-                      <span>Discuss labor signs and when to go to the hospital with your provider</span>
-                    </li>
-                  </ul>
+              <TabsContent value="recommendations" className="space-y-6">
+                <div className="bg-white rounded-xl shadow-md p-6">
+                  <h3 className="text-lg font-medium mb-4">{content.recommendationsTitle}</h3>
+                  
+                  {testResultCounts.high_risk > 0 && (
+                    <div className="bg-red-100 border-l-4 border-red-500 p-4 mb-6 rounded-md">
+                      <p className="text-red-700 font-medium">
+                        {content.highRiskAlert}
+                      </p>
+                    </div>
+                  )}
+                  
+                  {trimester === 3 && (
+                    <div>
+                      <h4 className="text-md font-medium mb-3">{content.thirdTrimesterTitle}</h4>
+                      <ul className="space-y-4">
+                        <li className="flex items-start">
+                          <span className="text-materna-500 mr-2">•</span>
+                          <span>{content.thirdTrimesterItem1}</span>
+                        </li>
+                        <li className="flex items-start">
+                          <span className="text-materna-500 mr-2">•</span>
+                          <span>{content.thirdTrimesterItem2}</span>
+                        </li>
+                        <li className="flex items-start">
+                          <span className="text-materna-500 mr-2">•</span>
+                          <span>{content.thirdTrimesterItem3}</span>
+                        </li>
+                        <li className="flex items-start">
+                          <span className="text-materna-500 mr-2">•</span>
+                          <span>{content.thirdTrimesterItem4}</span>
+                        </li>
+                        <li className="flex items-start">
+                          <span className="text-materna-500 mr-2">•</span>
+                          <span>{content.thirdTrimesterItem5}</span>
+                        </li>
+                      </ul>
+                    </div>
+                  )}
+                  
+                  {trimester === 2 && (
+                    <div>
+                      <h4 className="text-md font-medium mb-3">{content.secondTrimesterTitle}</h4>
+                      <ul className="space-y-4">
+                        <li className="flex items-start">
+                          <span className="text-materna-500 mr-2">•</span>
+                          <span>{content.secondTrimesterItem1}</span>
+                        </li>
+                        <li className="flex items-start">
+                          <span className="text-materna-500 mr-2">•</span>
+                          <span>{content.secondTrimesterItem2}</span>
+                        </li>
+                        <li className="flex items-start">
+                          <span className="text-materna-500 mr-2">•</span>
+                          <span>{content.secondTrimesterItem3}</span>
+                        </li>
+                        <li className="flex items-start">
+                          <span className="text-materna-500 mr-2">•</span>
+                          <span>{content.secondTrimesterItem4}</span>
+                        </li>
+                        <li className="flex items-start">
+                          <span className="text-materna-500 mr-2">•</span>
+                          <span>{content.secondTrimesterItem5}</span>
+                        </li>
+                      </ul>
+                    </div>
+                  )}
+                  
+                  {trimester === 1 && (
+                    <div>
+                      <h4 className="text-md font-medium mb-3">{content.firstTrimesterTitle}</h4>
+                      <ul className="space-y-4">
+                        <li className="flex items-start">
+                          <span className="text-materna-500 mr-2">•</span>
+                          <span>{content.firstTrimesterItem1}</span>
+                        </li>
+                        <li className="flex items-start">
+                          <span className="text-materna-500 mr-2">•</span>
+                          <span>{content.firstTrimesterItem2}</span>
+                        </li>
+                        <li className="flex items-start">
+                          <span className="text-materna-500 mr-2">•</span>
+                          <span>{content.firstTrimesterItem3}</span>
+                        </li>
+                        <li className="flex items-start">
+                          <span className="text-materna-500 mr-2">•</span>
+                          <span>{content.firstTrimesterItem4}</span>
+                        </li>
+                        <li className="flex items-start">
+                          <span className="text-materna-500 mr-2">•</span>
+                          <span>{content.firstTrimesterItem5}</span>
+                        </li>
+                      </ul>
+                    </div>
+                  )}
                 </div>
-              )}
-              
-              {trimester === 2 && (
-                <div>
-                  <h4 className="text-md font-medium mb-3">2nd Trimester Recommendations</h4>
-                  <ul className="space-y-4">
-                    <li className="flex items-start">
-                      <span className="text-materna-500 mr-2">•</span>
-                      <span>Schedule your 20-week anatomy scan</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="text-materna-500 mr-2">•</span>
-                      <span>Begin prenatal education classes</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="text-materna-500 mr-2">•</span>
-                      <span>Continue taking prenatal vitamins</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="text-materna-500 mr-2">•</span>
-                      <span>Stay physically active with pregnancy-safe exercises</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="text-materna-500 mr-2">•</span>
-                      <span>Begin planning for maternity leave and childcare</span>
-                    </li>
-                  </ul>
-                </div>
-              )}
-              
-              {trimester === 1 && (
-                <div>
-                  <h4 className="text-md font-medium mb-3">1st Trimester Recommendations</h4>
-                  <ul className="space-y-4">
-                    <li className="flex items-start">
-                      <span className="text-materna-500 mr-2">•</span>
-                      <span>Schedule your first prenatal appointment</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="text-materna-500 mr-2">•</span>
-                      <span>Begin taking prenatal vitamins with folic acid</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="text-materna-500 mr-2">•</span>
-                      <span>Avoid alcohol, smoking, and limit caffeine</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="text-materna-500 mr-2">•</span>
-                      <span>Stay hydrated and get plenty of rest</span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="text-materna-500 mr-2">•</span>
-                      <span>Consider first trimester screening tests</span>
-                    </li>
-                  </ul>
-                </div>
-              )}
-            </div>
-          </TabsContent>
-        </Tabs>
+              </TabsContent>
+            </Tabs>
 
-        {/* Button to download the JSON summary */}
-        <div className="mt-8">
-          <Button onClick={downloadSummaryJSON} className="w-full md:w-auto">
-            Download Summary JSON
-          </Button>
-        </div>
+            {/* Button to download the JSON summary */}
+            <div className="mt-8">
+              <Button onClick={downloadSummaryJSON} className="w-full md:w-auto">
+                {content.downloadSummaryButton}
+              </Button>
+            </div>
+          </>
+        )}
       </div>
     </Layout>
   );

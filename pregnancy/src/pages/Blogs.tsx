@@ -1,7 +1,9 @@
-import React, { useState, useEffect, memo } from "react";
+import React, { useState, useEffect, useCallback, memo } from "react";
 import { Link } from "react-router-dom";
 import Layout from "@/components/Layout";
 import InfiniteScroll from "react-infinite-scroll-component";
+import { useLanguage } from "@/contexts/LanguageContext"; // Import useLanguage hook
+import axios from "axios";
 
 // Memoized Blog Card to prevent unnecessary re-renders
 const BlogCard = memo(({ blog }: { blog: Blog }) => (
@@ -56,12 +58,28 @@ interface Blog {
 }
 
 const Blogs: React.FC = () => {
+  const { language } = useLanguage(); // Access language context from navigation bar
   const [selectedCategory, setSelectedCategory] = useState<string | null>("nutrition");
   const [blogs, setBlogs] = useState<Blog[]>([]);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [allArticles, setAllArticles] = useState<any[]>([]); // Store all articles for pagination
+
+  // Translation states
+  const [isLoadingTranslation, setIsLoadingTranslation] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [originalContent] = useState({
+    heroTitle: "Pregnancy & Maternal Care Resources",
+    heroDescription: "Trusted articles and research-based information for expecting mothers, curated from medical sources and maternal health experts.",
+    exploreTitle: "Explore Pregnancy Topics",
+    noArticlesMessage: "No articles found for {categoryName}. Try another category.",
+    loadingMore: "Loading more articles...",
+    endMessage: "You've reached all available articles in this category",
+    selectCategory: "Select a category to view related articles",
+    attribution: "Articles sourced from local data",
+  });
+  const [content, setContent] = useState(originalContent);
 
   const categories = [
     { id: "nutrition", name: "Pregnancy Nutrition", query: "pregnancy nutrition OR prenatal vitamins", file: "pregnancy_nutrition.json" },
@@ -132,23 +150,71 @@ const Blogs: React.FC = () => {
     }
   }, [selectedCategory]);
 
+  // Translation function
+  const translateText = async (text: string, targetLang: string) => {
+    if (targetLang === "en") return text;
+    try {
+      const response = await axios.post(
+        `https://translation.googleapis.com/language/translate/v2?key=${import.meta.env.VITE_GOOGLE_API_KEY}`,
+        {
+          q: text,
+          source: "en",
+          target: targetLang,
+          format: "text",
+        }
+      );
+      return response.data.data.translations[0].translatedText;
+    } catch (error) {
+      console.error("Translation error:", error);
+      setError("Failed to translate content.");
+      return text;
+    }
+  };
+
+  // Translate content based on language
+  const translateContent = useCallback(async (targetLang: string) => {
+    setIsLoadingTranslation(true);
+    setError(null);
+    const translatedContent = { ...originalContent };
+
+    // Translate all fields
+    for (const key in originalContent) {
+      translatedContent[key as keyof typeof originalContent] = await translateText(
+        originalContent[key as keyof typeof originalContent],
+        targetLang
+      );
+    }
+
+    setContent(translatedContent);
+    setIsLoadingTranslation(false);
+  }, [originalContent]);
+
+  useEffect(() => {
+    if (language === "en") {
+      setContent(originalContent);
+      setIsLoadingTranslation(false);
+      setError(null);
+    } else {
+      translateContent(language);
+    }
+  }, [language, translateContent]);
+
   return (
     <Layout>
       {/* Hero Section */}
       <div className="bg-gradient-to-r from-pink-100 to-red-50 py-16 px-4 text-center rounded-lg my-8">
         <h1 className="text-4xl font-bold mb-4 text-gray-800">
-          Pregnancy & Maternal Care Resources
+          {content.heroTitle}
         </h1>
         <p className="text-lg max-w-2xl mx-auto text-gray-600">
-          Trusted articles and research-based information for expecting mothers,
-          curated from medical sources and maternal health experts.
+          {content.heroDescription}
         </p>
       </div>
 
       {/* Category Selector */}
       <div className="bg-white p-4 rounded-lg shadow-md mb-8">
         <h2 className="text-2xl font-semibold text-center mb-6 text-red-600">
-          Explore Pregnancy Topics
+          {content.exploreTitle}
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {categories.map((category) => (
@@ -175,12 +241,12 @@ const Blogs: React.FC = () => {
           hasMore={hasMore}
           loader={
             <div className="text-center my-8 text-gray-600">
-              Loading more articles...
+              {content.loadingMore}
             </div>
           }
           endMessage={
             <div className="text-center my-8 text-gray-600">
-              You've reached all available articles in this category
+              {content.endMessage}
             </div>
           }
         >
@@ -191,7 +257,7 @@ const Blogs: React.FC = () => {
               ))
             ) : (
               <div className="text-center my-8 text-gray-600 col-span-full">
-                No articles found for {categories.find(c => c.id === selectedCategory)?.name}. Try another category.
+                {content.noArticlesMessage.replace("{categoryName}", categories.find(c => c.id === selectedCategory)?.name || "")}
               </div>
             )}
           </div>
@@ -201,11 +267,11 @@ const Blogs: React.FC = () => {
       {/* Attribution and Initial State */}
       {!selectedCategory ? (
         <div className="text-center py-16 text-gray-500">
-          Select a category to view related articles
+          {content.selectCategory}
         </div>
       ) : (
         <div className="text-center text-sm text-gray-400 mt-8 pb-4">
-          Articles sourced from local data
+          {content.attribution}
         </div>
       )}
     </Layout>

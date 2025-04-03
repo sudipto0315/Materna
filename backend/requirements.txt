@@ -3,3 +3,9 @@ SQLAlchemy==2.0.29
 Flask-JWT-Extended==4.6.0
 Werkzeug==3.0.2
 Flask-CORS==4.0.0
+fastapi
+uvicorn 
+pydantic
+torch 
+transformers 
+langchain langchain_community langchain_huggingface faiss-cpu
