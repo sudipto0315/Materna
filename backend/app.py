@@ -376,13 +376,10 @@ def create_vector_store(chunks, model_name="sentence-transformers/all-MiniLM-L6-
 def initialize_model_and_tokenizer(model_name="ritvik77/Medical_Doctor_AI_LoRA-Mistral-7B-Instruct_FullModel"):
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = AutoModelForCausalLM.from_pretrained(
-        # model_name,
-        # torch_dtype=torch.float16,
-        # device_map="auto",
-        # load_in_4bit=True
         model_name,
         torch_dtype=torch.float16,
-        device_map="mps"  # Use MPS for Apple Silicon
+        device_map="auto",
+        load_in_4bit=True
     )
     return tokenizer, model
 
