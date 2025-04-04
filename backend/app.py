@@ -6,15 +6,21 @@ from flask_cors import CORS
 import datetime
 import uuid
 import json
-
 import requests
-import json
+import threading
+from pydantic import BaseModel, ValidationError
+from transformers import AutoModelForCausalLM, AutoTokenizer
+import torch
+from langchain_community.document_loaders import PyPDFLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.vectorstores import FAISS
 
 app = Flask(__name__)
 
 # JWT configuration
 app.config['JWT_SECRET_KEY'] = 'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6'
-app.config['JWT_ACCESS_TOKEN_EXPIRES'] = datetime.timedelta(hours=1)
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = datetime.timedelta(days=1)
 jwt = JWTManager(app)
 
 # Enable CORS with proper configuration
@@ -30,10 +36,11 @@ def init_db():
     c = conn.cursor()
     # Users table with patient_id
     c.execute('''CREATE TABLE IF NOT EXISTS users 
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                 (user_id VARCHAR(50) PRIMARY KEY,
                   username TEXT UNIQUE NOT NULL, 
                   password TEXT NOT NULL,
                   patient_id VARCHAR(50) UNIQUE NOT NULL)''')
+    
     # Patients table with patient_id as foreign key
     c.execute('''CREATE TABLE IF NOT EXISTS Patients (
         patient_id VARCHAR(50) PRIMARY KEY,
@@ -41,11 +48,11 @@ def init_db():
         last_name VARCHAR(50),
         gender VARCHAR(10),
         dob DATE,
-        contact_number BIGINT,
+        contact_number VARCHAR(20),
         email VARCHAR(100),
         address TEXT,
         emergency_contact VARCHAR(50),
-        emergency_number BIGINT,
+        emergency_number VARCHAR(20),
         height_cm INT,
         pre_pregnancy_weight FLOAT,
         current_weight FLOAT,
@@ -59,24 +66,35 @@ def init_db():
         registration_date TIMESTAMP,
         last_updated TIMESTAMP
     )''')
+
     # MedicalReports table to store reports and analysis
     c.execute('''CREATE TABLE IF NOT EXISTS MedicalReports (
-        report_id TEXT PRIMARY KEY,
+        report_id VARCHAR(50) PRIMARY KEY,
         patient_id VARCHAR(50) NOT NULL,
         type TEXT NOT NULL,
         category TEXT NOT NULL,
         date TEXT NOT NULL,
         file_url TEXT NOT NULL,
-       A notes TEXT,
-        analysis_results TEXT,  -- Store JSON string of analysis results
+        notes TEXT,
+        analysis_results TEXT,
         created_at TIMESTAMP,
+        FOREIGN KEY (patient_id) REFERENCES Patients(patient_id)
+    )''')
+    # GeneratedReports table to store generated reports
+    c.execute('''CREATE TABLE IF NOT EXISTS GeneratedReports (
+        report_id TEXT PRIMARY KEY,
+        patient_id VARCHAR(50) NOT NULL,
+        report_content TEXT,
+        status TEXT NOT NULL,
+        created_at TIMESTAMP,
+        completed_at TIMESTAMP,
         FOREIGN KEY (patient_id) REFERENCES Patients(patient_id)
     )''')
     conn.commit()
     conn.close()
 
 # Generate a unique patient ID
-def generate_patient_id():
+def generate_id():
     return str(uuid.uuid4())[:8]
 
 # Signup route
@@ -92,14 +110,15 @@ def signup():
     if not username or not password:
         return jsonify({'message': 'Username and password are required'}), 400
 
+    user_id = generate_id()
+    patient_id = generate_id()
     hashed_password = generate_password_hash(password)
-    patient_id = generate_patient_id()
 
     try:
         conn = sqlite3.connect('hack.db')
         c = conn.cursor()
-        c.execute("INSERT INTO users (username, password, patient_id) VALUES (?, ?, ?)", 
-                  (username, hashed_password, patient_id))
+        c.execute("INSERT INTO users (user_id, username, password, patient_id) VALUES (?, ?, ?, ?)", 
+                  (user_id, username, hashed_password, patient_id))
         conn.commit()
         conn.close()
         return jsonify({'message': 'User created successfully', 'patient_id': patient_id}), 201
@@ -261,7 +280,7 @@ def store_report():
     data = request.get_json()
 
     report_data = {
-        'report_id': data.get('id'),
+        'report_id': generate_id(),
         'patient_id': patient_id,
         'type': data.get('type'),
         'category': data.get('category'),
@@ -322,145 +341,305 @@ def get_medical_reports():
     return jsonify(medical_reports), 200
 
 
-# Add this new route to your existing Flask application (paste-2.txt)
-@app.route('/generate-maternal-report', methods=['POST', 'OPTIONS'])
-@jwt_required()
-def generate_maternal_report():
-    """
-    Endpoint to generate a maternal health report by sending patient data to the RAG API.
-    This should be added to your existing Flask application.
-    """
-    if request.method == 'OPTIONS':
-        return jsonify({'status': 'OK'}), 200
+# Global variables for model, tokenizer, and vector store (loaded at startup)
+model = None
+tokenizer = None
+vector_store = None
+
+# Pydantic model for JSON input validation
+class PatientRequest(BaseModel):
+    patient_id: str
+    patient_data: dict  # JSON object containing patient data
+
+# [All unchanged functions remain the same: load_and_split_pdf, create_vector_store, 
+# initialize_model_and_tokenizer, calculate_pregnancy_week, extract_patient_context, 
+# generate_maternal_report]
+
+def load_and_split_pdf(pdf_path):
+    loader = PyPDFLoader(pdf_path)
+    documents = loader.load()
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,
+        chunk_overlap=200,
+        length_function=len
+    )
+    chunks = text_splitter.split_documents(documents)
+    print(f"Your PDF has been split into {len(chunks)} chunks")
+    return chunks
+
+def create_vector_store(chunks, model_name="sentence-transformers/all-MiniLM-L6-v2", save_path="faiss_index"):
+    embeddings = HuggingFaceEmbeddings(model_name=model_name)
+    vector_store = FAISS.from_documents(chunks, embeddings)
+    vector_store.save_local(save_path)
+    return vector_store
+
+def initialize_model_and_tokenizer(model_name="ritvik77/Medical_Doctor_AI_LoRA-Mistral-7B-Instruct_FullModel"):
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForCausalLM.from_pretrained(
+        # model_name,
+        # torch_dtype=torch.float16,
+        # device_map="auto",
+        # load_in_4bit=True
+        model_name,
+        torch_dtype=torch.float16,
+        device_map="mps"  # Use MPS for Apple Silicon
+    )
+    return tokenizer, model
+
+def calculate_pregnancy_week(lmp_date):
+    lmp = datetime.strptime(lmp_date, '%Y-%m-%d')
+    current_date = datetime.now()
+    days_pregnant = (current_date - lmp).days
+    weeks_pregnant = days_pregnant // 7
+    return weeks_pregnant
+
+def extract_patient_context(patient_data, patient_id):
+    if patient_id not in patient_data:
+        return "Patient not found."
     
-    # Get patient_id from the authenticated user
-    patient_id = get_jwt_identity()
+    patient = patient_data[patient_id]
+    personal_info = patient['personal_info']
+    questionnaire = patient['questionnaire']
+    risk_factors = patient.get('risk_factors', [])
+    test_results = patient.get('test_results', [])
+    
+    context = f"""
+Patient Summary:
+Name: {personal_info['first_name']} {personal_info['last_name']}
+Age: {2025 - int(personal_info['dob'].split('-')[0])} years
+Gender: {personal_info['gender']}
+Due Date: {personal_info['due_date']}
+Last Menstrual Period: {personal_info['lmp']}
+Current Week: {calculate_pregnancy_week(personal_info['lmp'])}
+Blood Group: {personal_info['blood_group']}
+Pre-existing Conditions: {personal_info['preexisting_conditions']}
+Height: {personal_info['height_cm']} cm
+Current Weight: {personal_info['current_weight']} kg
+Pre-pregnancy Weight: {personal_info['pre_pregnancy_weight']} kg
+
+Questionnaire Information:
+First Pregnancy: {questionnaire['is_first_pregnancy']}
+Exercise Frequency: {questionnaire['exercise_frequency']}
+Emotional Wellbeing: {questionnaire['emotional_wellbeing']}
+Prenatal Vitamins: {questionnaire['prenatal_vitamins']}
+"""
+    
+    if risk_factors:
+        context += "Risk Factors: ,"
+        for risk in risk_factors:
+            context += f"- {risk['test_name']}: {risk['result_value']} {risk['result_unit']} (Reference Range: {risk['reference_range']}), Risk Level: {risk['risk_level']},"
+    
+    abnormal_results = [result for result in test_results if result['risk_level'] in ['borderline', 'high_risk']]
+    if abnormal_results:
+        context += "Abnormal Test Results: ,"
+        for result in abnormal_results:
+            context += f"- {result['test_name']}: {result['result_value']} {result['result_unit']} (Reference Range: {result['ref_range_low']} - {result['ref_range_high']}), Risk Level: {result['risk_level']},"
+    
+    return context
+
+def generate_maternal_report(patient_info, vector_store, model, tokenizer):
+    if not tokenizer:
+        raise ValueError("Tokenizer failed to initialize. Ensure 'sentencepiece' is installed.")
+    retrieved_docs = vector_store.similarity_search(patient_info, k=3)
+    medical_context = "\n".join([doc.page_content[:300] for doc in retrieved_docs])
+    
+    prompt = f"""You are an expert obstetrician. Analyze this maternal patient profile and provide a health assessment:
+
+Patient Profile:
+{patient_info}
+
+Guidelines:
+{medical_context}
+
+Provide a profile analysis with:
+1. Patient Overview
+2. Health Status Analysis
+3. Potential Risk Indicators
+4. Recommendations
+5. Next Steps
+"""
+
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    
+    inputs = tokenizer(
+        prompt, 
+        return_tensors="pt", 
+        padding=True,
+        truncation=True,
+        max_length=3000
+    )
+    inputs = inputs.to(model.device)
+    
+    print("Starting generation...")
     
     try:
-        # Fetch patient data from your SQLite database
-        conn = sqlite3.connect('hack.db')
-        c = conn.cursor()
-        
-        # Get basic patient information
-        c.execute("SELECT * FROM Patients WHERE patient_id = ?", (patient_id,))
-        patient = c.fetchone()
-        
-        if not patient:
-            return jsonify({'message': 'Patient not found'}), 404
-        
-        # Format patient data for the RAG API
-        # This dictionary structure matches what the RAG system expects
-        patient_data = {
-            patient_id: {
-                "personal_info": {
-                    "first_name": patient[1],        # first_name
-                    "last_name": patient[2],         # last_name
-                    "gender": patient[3],            # gender
-                    "dob": patient[4],               # dob
-                    "blood_group": patient[17],      # blood_group
-                    "height_cm": patient[10],        # height_cm
-                    "current_weight": patient[12],   # current_weight
-                    "pre_pregnancy_weight": patient[11], # pre_pregnancy_weight
-                    "lmp": patient[13],              # lmp (last menstrual period)
-                    "due_date": patient[14],         # due_date
-                    "preexisting_conditions": ""     # Add if you have this data
-                },
-                "questionnaire": {
-                    "is_first_pregnancy": "Yes" if patient[15] == 1 else "No",  # based on gravida
-                    "exercise_frequency": "Unknown",  # Add if you have this data
-                    "emotional_wellbeing": "Unknown", # Add if you have this data
-                    "prenatal_vitamins": "Unknown"    # Add if you have this data
-                }
-            }
-        }
-        
-        # Get medical reports for risk factors and test results
-        c.execute("SELECT * FROM MedicalReports WHERE patient_id = ?", (patient_id,))
-        reports = c.fetchall()
-        conn.close()
-        
-        # Process any existing medical reports for risk data
-        risk_factors = []
-        test_results = []
-        
-        for report in reports:
-            # The analysis_results is stored as a JSON string, parse it
-            if report[7]:  # analysis_results column
-                try:
-                    analysis = json.loads(report[7])
-                    
-                    # Extract risk factors if present
-                    if 'risk_factors' in analysis and isinstance(analysis['risk_factors'], list):
-                        risk_factors.extend(analysis['risk_factors'])
-                    
-                    # Extract test results if present
-                    if 'test_results' in analysis and isinstance(analysis['test_results'], list):
-                        test_results.extend(analysis['test_results'])
-                except json.JSONDecodeError:
-                    pass  # Skip if JSON is invalid
-        
-        # Add risk factors and test results if available
-        if risk_factors:
-            patient_data[patient_id]['risk_factors'] = risk_factors
-        
-        if test_results:
-            patient_data[patient_id]['test_results'] = test_results
-        
-        # Prepare the data for the RAG API request
-        rag_request_data = {
-            "patient_id": patient_id,
-            "patient_data": patient_data
-        }
-        
-        # Send request to the RAG API
-        response = requests.post(
-            f"http://localhost:8000/generate_report", 
-            json=rag_request_data,
-            headers={"Content-Type": "application/json"}
+        outputs = model.generate(
+            inputs.input_ids,
+            attention_mask=inputs.attention_mask,
+            max_new_tokens=800,
+            temperature=0.3,
+            top_p=0.9,
+            do_sample=False,
+            num_beams=1,
+            pad_token_id=tokenizer.pad_token_id,
+            eos_token_id=tokenizer.eos_token_id,
         )
         
-        # Check if the request was successful
-        if response.status_code != 200:
-            return jsonify({
-                'message': 'Error from RAG system', 
-                'error': response.json().get('detail', 'Unknown error')
-            }), 500
+        report = tokenizer.decode(outputs[0][inputs.input_ids.size(1):], skip_special_tokens=True)
         
-        # Get the report from the RAG API response
-        report_data = response.json()
+        print(f"Generation complete, produced {len(outputs[0]) - inputs.input_ids.size(1)} tokens")
+        
+        if not report or len(report) < 50:
+            print("Generated report too short, returning fallback")
+            return """
+# Maternal Health Assessment
+
+## Patient Overview
+The patient is currently pregnant and receiving prenatal care.
+
+## Health Status Analysis
+Based on the available information, the patient appears to be in stable condition.
+
+## Potential Risk Indicators
+A comprehensive risk assessment requires in-person evaluation.
+
+## Recommendations
+- Continue prenatal vitamins
+- Maintain regular checkups
+- Monitor for warning signs
+- Stay hydrated and maintain a balanced diet
+
+## Next Steps
+Schedule next prenatal appointment within 4 weeks.
+"""
+        
+        return report
+    
+    except Exception as e:
+        print(f"Error during generation: {str(e)}")
+        import traceback
+        print(traceback.format_exc())
+        return "Error generating report. Please try again with simpler parameters."
+
+# Startup initialization
+def initialize_system():
+    global model, tokenizer, vector_store
+    pdf_path = "maternacare.pdf"
+    
+    try:
+        print("Loading and splitting PDF...")
+        chunks = load_and_split_pdf(pdf_path)
+        
+        print("Creating vector store...")
+        vector_store = create_vector_store(chunks, save_path="maternal_care_faiss_index")
+        
+        print("Initializing model and tokenizer...")
+        tokenizer, model = initialize_model_and_tokenizer()  
+        print("System initialized successfully.")
+    except Exception as e:
+        print(f"Error during initialization: {str(e)}")
+        import traceback
+        print(traceback.format_exc())
+
+# Initialize system when app starts
+with app.app_context():
+    initialize_system()
+
+def generate_report_task(report_id, patient_id, patient_info):
+    # Generate the report
+    report = generate_maternal_report(patient_info, vector_store, model, tokenizer)
+    
+    # Update database with the completed report
+    conn = sqlite3.connect('hack.db')
+    c = conn.cursor()
+    c.execute('''UPDATE GeneratedReports 
+                 SET report_content = ?, status = ?, completed_at = ? 
+                 WHERE report_id = ?''', 
+              (report, 'completed', datetime.now().isoformat(), report_id))
+    conn.commit()
+    conn.close()
+    
+    print(f"Report {report_id} generated and stored in database")
+
+# Modified API route to handle asynchronous report generation
+@app.route('/generate_report', methods=['POST'])
+def generate_report():
+    try:
+        # Get JSON data from request
+        data = request.get_json()
+        
+        # Validate input using Pydantic
+        try:
+            patient_request = PatientRequest(**data)
+        except ValidationError as e:
+            return jsonify({"error": "Invalid input data", "details": e.errors()}), 400
+        
+        patient_id = patient_request.patient_id
+        patient_info = extract_patient_context(patient_request.patient_data, patient_id)
+        if patient_info == "Patient not found.":
+            return jsonify({"error": "Patient not found in the provided data"}), 404
         
         # Generate a unique report ID
-        report_id = f"rag_{patient_id}_{int(datetime.datetime.now().timestamp())}"
+        report_id = str(uuid.uuid4())
         
-        # Store the generated report in the database
+        # Store initial entry in database
         conn = sqlite3.connect('hack.db')
         c = conn.cursor()
-        c.execute('''INSERT INTO MedicalReports 
-                     (report_id, patient_id, type, category, date, file_url, notes, analysis_results, created_at) 
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                 (report_id, patient_id, "RAG", "Maternal Health Assessment", 
-                  datetime.datetime.now().isoformat(), "", 
-                  "Automatically generated maternal health report", 
-                  json.dumps({"report_content": report_data["report"]}),
-                  datetime.datetime.now().isoformat()))
+        c.execute('''INSERT INTO GeneratedReports 
+                     (report_id, patient_id, status, created_at) 
+                     VALUES (?, ?, ?, ?)''',
+                  (report_id, patient_id, 'processing', datetime.now().isoformat()))
         conn.commit()
         conn.close()
         
-        # Return the generated report and its ID
-        return jsonify({
-            'message': 'Report generated successfully',
-            'report_id': report_id,
-            'report': report_data['report']
-        }), 201
+        # Start background task to generate the report
+        thread = threading.Thread(
+            target=generate_report_task, 
+            args=(report_id, patient_id, patient_info)
+        )
+        thread.daemon = True
+        thread.start()
         
+        # Return immediately with the report_id that client can use to check status
+        return jsonify({
+            "message": "Report generation started", 
+            "report_id": report_id, 
+            "status": "processing"
+        })
+    
     except Exception as e:
-        import traceback
-        print(traceback.format_exc())
-        return jsonify({'message': f'Error generating report: {str(e)}'}), 500
+        return jsonify({"error": str(e)}), 500
 
-
+# Add a new endpoint to check report status and retrieve the report
+@app.route('/check_report/<report_id>', methods=['GET'])
+def check_report(report_id):
+    try:
+        conn = sqlite3.connect('hack.db')
+        c = conn.cursor()
+        c.execute("SELECT report_id, patient_id, report_content, status, created_at, completed_at FROM GeneratedReports WHERE report_id = ?", 
+                  (report_id,))
+        report = c.fetchone()
+        conn.close()
+        
+        if not report:
+            return jsonify({"error": "Report not found"}), 404
+        
+        report_data = {
+            "report_id": report[0],
+            "patient_id": report[1],
+            "report_content": report[2],
+            "status": report[3],
+            "created_at": report[4],
+            "completed_at": report[5]
+        }
+        
+        return jsonify(report_data), 200
+    
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == '__main__':
     init_db()
-    app.run(debug=True, port=6000)
+    app.run(port=6000)

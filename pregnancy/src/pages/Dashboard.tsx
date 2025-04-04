@@ -291,52 +291,99 @@ Pre-pregnancy Weight: 60 kg
 - Offer the patient counseling and emotional support throughout her pregnancy.
   `.trim();
 
-  // Function to generate and download the detailed report as a PDF using the hardcoded string
-  const handleDownloadReport = () => {
+  const [reportId, setReportId] = useState<string | null>(null);
+  const [reportContent, setReportContent] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>("idle");
+  const [isGenerating, setIsGenerating] = useState<boolean>(false);
+
+  // Function to trigger report generation and polling
+  const handleGenerateReport = async (patientData: any) => {
     try {
-      // Use the hardcoded report string
-      const report = hardcodedReport || 'No report content available';
+      setIsGenerating(true);
+      setReportContent(null); // Clear old report
 
-      // Generate PDF using jsPDF
+      const response = await fetch("/api/generate_report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patient_id: patientData.id,
+          patient_data: patientData,
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to start report generation");
+
+      const data = await response.json();
+      setReportId(data.report_id);
+      setStatus(data.status);
+
+      pollReportStatus(data.report_id);
+    } catch (error) {
+      console.error("Error generating report:", error);
+      alert("Failed to start report generation. Please try again.");
+      setIsGenerating(false);
+    }
+  };
+
+  // Function to poll report status periodically
+  const pollReportStatus = (id: string) => {
+    const interval = setInterval(async () => {
+      try {
+        const response = await fetch(`/api/check_report/${id}`);
+        if (!response.ok) throw new Error("Failed to fetch report status");
+
+        const data = await response.json();
+        setStatus(data.status);
+
+        if (data.status === "completed" && data.report_content) {
+          setReportContent(data.report_content);
+          clearInterval(interval);
+          setIsGenerating(false);
+        }
+      } catch (error) {
+        console.error("Error checking report status:", error);
+      }
+    }, 5000);
+  };
+
+  // Function to generate and download PDF
+  const handleDownloadReport = () => {
+    if (!reportContent) {
+      alert("Report is still being generated. Please wait.");
+      return;
+    }
+
+    try {
       const doc = new jsPDF();
-      let y = 10; // Starting y-position
+      let y = 10;
 
-      // Add the consistent heading "Maternal Health Report"
-      doc.setFontSize(20); // Slightly larger for the main heading
+      doc.setFontSize(20);
       doc.text("Maternal Health Report", 10, y);
-      y += 15; // Add space after the heading
+      y += 15;
 
-      // Process the report content with reduced font sizes
-      const lines = report.split('\n');
-      lines.forEach(line => {
-        if (line.startsWith('Response:')) {
-          // Skip the "Response:" line as it's not needed in the PDF
-          return;
-        } else if (line.match(/^\d+\.\s/)) {
-          // Section headings (e.g., "1. Patient Overview:")
-          doc.setFontSize(14); // Reduced from 18
+      const lines = reportContent.split("\n");
+      lines.forEach((line) => {
+        if (line.match(/^\d+\.\s/)) {
+          doc.setFontSize(14);
           doc.text(line, 10, y);
-        } else if (line.startsWith('- ')) {
-          // List items
-          doc.setFontSize(9); // Reduced from 12
+        } else if (line.startsWith("- ")) {
+          doc.setFontSize(9);
           doc.text(`• ${line.substring(2)}`, 15, y);
         } else {
-          // Regular text
-          doc.setFontSize(9); // Reduced from 12
+          doc.setFontSize(9);
           doc.text(line, 10, y);
         }
-        y += 8; // Reduced line spacing from 10 to 8 to fit more content
-        if (y > 280) { // Check if we need a new page
+        y += 8;
+        if (y > 280) {
           doc.addPage();
           y = 10;
         }
       });
 
-      // Download the PDF
-      doc.save(`detailed_patient_report_${patientData.id}.pdf`);
+      doc.save(`detailed_patient_report.pdf`);
     } catch (error) {
-      console.error('Error generating PDF report:', error);
-      alert('Failed to download the detailed report. Please try again later.');
+      console.error("Error generating PDF:", error);
+      alert("Failed to download the report.");
     }
   };
 
@@ -444,10 +491,28 @@ Pre-pregnancy Weight: 60 kg
                         {content.viewReportsButton}
                       </Button>
                     </Link>
-                    <Button variant="outline" size="sm" onClick={handleDownloadReport}>
-                      <Download className="mr-2 h-4 w-4" />
-                      {content.downloadReportButton}
-                    </Button>
+                    {/* Button to Generate & Download Report */}
+                    {status === "idle" || status === "failed" ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleGenerateReport(patientData)}
+                        disabled={isGenerating}
+                      >
+                        <Download className="mr-2 h-4 w-4" />
+                        {isGenerating ? "Generating..." : "Generate Report"}
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleDownloadReport}
+                        disabled={status !== "completed"}
+                      >
+                        <Download className="mr-2 h-4 w-4" />
+                        Download Detailed Patient Report
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>

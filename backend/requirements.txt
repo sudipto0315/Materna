@@ -18,3 +18,8 @@ langchain
 langchain_community 
 langchain_huggingface 
 faiss-cpu
+pypdf
+protobuf
+sentencepiece
+accelerate>=0.26.0
+bitsandbytes

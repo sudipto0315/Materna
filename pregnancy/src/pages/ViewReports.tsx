@@ -174,7 +174,7 @@ const ViewReportsPage: React.FC = () => {
                   {content.patientLabel} {patientData.firstName} {patientData.lastName}
                 </CardTitle>
                 <CardDescription>
-                  {content.patientIdLabel.replace("{id}", patientData.id)}
+                  {content.patientIdLabel.replace("{id}", patientData.patient_id)}
                 </CardDescription>
               </CardHeader>
             </Card>
