@@ -1,25 +1,55 @@
 // src/components/TextChatbot.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { sendToGemini } from '../lib/api';
+import { useLanguage } from '../contexts/LanguageContext';
+import { translations } from '../locales/translations';
+import { languageNames } from '../constants/languageNames';
 import Layout from "@/components/Layout";
 
-const TextChatbot: React.FC = () => {
+interface TextChatbotProps {
+  initialPrompt: string;
+  language: string;
+}
+
+const TextChatbot: React.FC<TextChatbotProps> = ({ initialPrompt, language }) => {
+  const { language: currentLanguage } = useLanguage();
+  const t = (key: string) => translations[currentLanguage][key];
   const [history, setHistory] = useState<{ user: string; bot: string }[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
 
   console.log('TextChatbot rendered, history:', history); // Debug log
 
+  // Send initial prompt when component mounts and history is empty
+  useEffect(() => {
+    if (initialPrompt && history.length === 0) {
+      const sendInitialPrompt = async () => {
+        setLoading(true);
+        try {
+          const response = await sendToGemini(initialPrompt);
+          setHistory([{ user: '', bot: response }]);
+        } catch (error) {
+          console.error('Error sending initial prompt:', error);
+          setHistory([{ user: '', bot: t('errorMessage') }]);
+        } finally {
+          setLoading(false);
+        }
+      };
+      sendInitialPrompt();
+    }
+  }, [initialPrompt, t]);
+
   const handleSend = async () => {
     if (input.trim() === '') return;
     setLoading(true);
     try {
-      const response = await sendToGemini(input);
+      const modifiedInput = `User says: ${input}. Please respond in ${languageNames[language]}.`;
+      const response = await sendToGemini(modifiedInput);
       setHistory([...history, { user: input, bot: response }]);
       setInput('');
     } catch (error) {
       console.error('Error:', error);
-      setHistory([...history, { user: input, bot: 'कुछ गलत हो गया। कृपया पुनः प्रयास करें।' }]);
+      setHistory([...history, { user: input, bot: t('errorMessage') }]);
     } finally {
       setLoading(false);
     }
@@ -29,12 +59,18 @@ const TextChatbot: React.FC = () => {
     <div className="chatbot">
       <div className="chat-window">
         {history.length === 0 ? (
-          <p>कोई संदेश नहीं। चैट शुरू करने के लिए नीचे टाइप करें!</p>
+          <p>{t('noMessagesText')}</p>
         ) : (
           history.map((msg, index) => (
             <div key={index} className="message-pair">
-              <p className="message user"><strong>आप:</strong> {msg.user}</p>
-              <p className="message bot"><strong>बॉट:</strong> {msg.bot}</p>
+              {msg.user && (
+                <p className="message user">
+                  <strong>{t('you')}:</strong> {msg.user}
+                </p>
+              )}
+              <p className="message bot" style={{ whiteSpace: 'pre-wrap' }}>
+                <strong>{t('bot')}:</strong> {msg.bot}
+              </p>
             </div>
           ))
         )}
@@ -45,11 +81,11 @@ const TextChatbot: React.FC = () => {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-          placeholder="अपना संदेश टाइप करें"
+          placeholder={t('typeYourMessage')}
           disabled={loading}
         />
         <button onClick={handleSend} disabled={loading}>
-          {loading ? 'भेज रहा है...' : 'भेजें'}
+          {loading ? t('sending') : t('send')}
         </button>
       </div>
     </div>
