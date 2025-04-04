@@ -177,7 +177,7 @@ const ReportUploadSection: React.FC<ReportUploadSectionProps> = ({
 
       setAnalysisResult(analysis); // Display analysis result regardless of status initially
 
-      if (analysis.status === "success" || analysis.status === "warning") {
+      if (analysis.status === "success" || analysis.status === "error") {
         // Even if analysis has warnings, try to upload/add the report
         const fileUrl = await uploadFile(file); // Consider uploading only if analysis is not 'error'
         const newReport = {
@@ -191,9 +191,9 @@ const ReportUploadSection: React.FC<ReportUploadSectionProps> = ({
         };
         addMedicalReport(newReport); // Add report to global state
         toast({
-          title: analysis.status === "warning" ? "Analysis Warning" : "Analysis Complete",
-          description: analysis.message || `Report analyzed ${analysis.status === "warning" ? 'with warnings' : 'successfully'}.`,
-          variant: analysis.status === "warning" ? "default" : "default", // Or use a specific warning style
+          title: analysis.status === "error" ? "Analysis Warning" : "Analysis Complete",
+          description: analysis.message || `Report analyzed ${analysis.status === "error" ? 'with warnings' : 'successfully'}.`,
+          variant: analysis.status === "error" ? "default" : "default", // Or use a specific warning style
         });
       } else { // Handle analysis errors
         toast({
