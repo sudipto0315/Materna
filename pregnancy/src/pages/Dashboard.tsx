@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { jsPDF } from "jspdf"; // Import jsPDF for PDF generation
 import { useLanguage } from "../contexts/LanguageContext"; // Import useLanguage hook
 import axios from "axios";
+import  BACKEND_URL  from '../configs/config';
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -302,7 +303,7 @@ Pre-pregnancy Weight: 60 kg
       setIsGenerating(true);
       setReportContent(null); // Clear old report
 
-      const response = await fetch("/api/generate_report", {
+      const response = await fetch(`${BACKEND_URL}/generate_report`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -329,7 +330,7 @@ Pre-pregnancy Weight: 60 kg
   const pollReportStatus = (id: string) => {
     const interval = setInterval(async () => {
       try {
-        const response = await fetch(`/api/check_report/${id}`);
+        const response = await fetch(`${BACKEND_URL}/check_report/${id}`);
         if (!response.ok) throw new Error("Failed to fetch report status");
 
         const data = await response.json();

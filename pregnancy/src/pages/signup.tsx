@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
 import axios from "axios";
 import { Lock, User } from "lucide-react";
+import BACKEND_URL from "../configs/config";
 
 const SignupPage: React.FC = () => {
   const navigate = useNavigate();
@@ -44,7 +45,7 @@ const SignupPage: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const response = await axios.post("/api/signup", {
+      const response = await axios.post(`${BACKEND_URL}/signup`, {
         username,
         password,
       });

@@ -13,7 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Checkbox } from "@/components/ui/checkbox";
 import axios from "axios";
 import { useApp } from "@/contexts/AppContext";
-
+import BACKEND_URL from '../configs/config';
 const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
   const { setPatientData, setIsRegistered } = useApp(); // Add context setters
@@ -55,7 +55,7 @@ const RegisterPage: React.FC = () => {
       if (!token || !patientId) return;
 
       try {
-        const response = await axios.get("/api/patient-data", {
+        const response = await axios.get(`${BACKEND_URL}/patient-data`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = response.data;
@@ -150,7 +150,7 @@ const RegisterPage: React.FC = () => {
 
     try {
       const response = await axios.post(
-        "/api/register-patient",
+        `${BACKEND_URL}/register-patient`,
         newPatientData,
         { headers: { Authorization: `Bearer ${token}` } }
       );
