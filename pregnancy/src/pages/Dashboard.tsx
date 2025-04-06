@@ -15,6 +15,7 @@ import { jsPDF } from "jspdf"; // Import jsPDF for PDF generation
 import { useLanguage } from "../contexts/LanguageContext"; // Import useLanguage hook
 import axios from "axios";
 
+
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const { 
@@ -302,7 +303,7 @@ Pre-pregnancy Weight: 60 kg
       setIsGenerating(true);
       setReportContent(null); // Clear old report
 
-      const response = await fetch("/api/generate_report", {
+      const response = await fetch(`${BACKEND_URL}/generate_report`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

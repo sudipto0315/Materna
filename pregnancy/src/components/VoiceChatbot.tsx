@@ -1,10 +1,8 @@
-// src/components/VoiceChatbot.tsx
 import React, { useState, useEffect } from 'react';
 import { sendToGemini } from '../lib/api';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../locales/translations';
 import { languageNames, recognitionLangMap } from '../constants/languageNames';
-import Layout from "@/components/Layout";
 
 interface VoiceChatbotProps {
   initialPrompt: string;
@@ -20,9 +18,6 @@ const VoiceChatbot: React.FC<VoiceChatbotProps> = ({ initialPrompt, language }) 
   const [recognition, setRecognition] = useState<any>(null);
   const [selectedVoice, setSelectedVoice] = useState<any>(null);
 
-  console.log('VoiceChatbot rendered, history:', history); // Debug log
-
-  // Initialize speech recognition
   useEffect(() => {
     if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -35,14 +30,12 @@ const VoiceChatbot: React.FC<VoiceChatbotProps> = ({ initialPrompt, language }) 
     }
   }, []);
 
-  // Update recognition language when language changes
   useEffect(() => {
     if (recognition) {
       recognition.lang = recognitionLangMap[language];
     }
   }, [language, recognition]);
 
-  // Select voice based on language
   useEffect(() => {
     const synth = window.speechSynthesis;
     const updateVoice = () => {
@@ -64,7 +57,6 @@ const VoiceChatbot: React.FC<VoiceChatbotProps> = ({ initialPrompt, language }) 
     }
   };
 
-  // Send initial prompt when component mounts and history is empty
   useEffect(() => {
     if (initialPrompt && history.length === 0) {
       const sendInitialPrompt = async () => {
@@ -133,11 +125,11 @@ const VoiceChatbot: React.FC<VoiceChatbotProps> = ({ initialPrompt, language }) 
             <div key={index} className="message-pair">
               {msg.user && (
                 <p className="message user">
-                  <strong>{t('you')}:</strong> {msg.user}
+                  <strong>{t('you')}:</strong> <span className="user-text">{msg.user}</span>
                 </p>
               )}
               <p className="message bot" style={{ whiteSpace: 'pre-wrap' }}>
-                <strong>{t('bot')}:</strong> {msg.bot}
+                <strong>{t('bot')}:</strong> <span className="bot-text">{msg.bot}</span>
               </p>
             </div>
           ))

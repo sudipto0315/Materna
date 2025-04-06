@@ -1,10 +1,8 @@
-// src/components/TextChatbot.tsx
 import React, { useState, useEffect } from 'react';
 import { sendToGemini } from '../lib/api';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../locales/translations';
 import { languageNames } from '../constants/languageNames';
-import Layout from "@/components/Layout";
 
 interface TextChatbotProps {
   initialPrompt: string;
@@ -18,9 +16,6 @@ const TextChatbot: React.FC<TextChatbotProps> = ({ initialPrompt, language }) =>
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
 
-  console.log('TextChatbot rendered, history:', history); // Debug log
-
-  // Send initial prompt when component mounts and history is empty
   useEffect(() => {
     if (initialPrompt && history.length === 0) {
       const sendInitialPrompt = async () => {
@@ -65,11 +60,11 @@ const TextChatbot: React.FC<TextChatbotProps> = ({ initialPrompt, language }) =>
             <div key={index} className="message-pair">
               {msg.user && (
                 <p className="message user">
-                  <strong>{t('you')}:</strong> {msg.user}
+                  <strong>{t('you')}:</strong> <span className="user-text">{msg.user}</span>
                 </p>
               )}
               <p className="message bot" style={{ whiteSpace: 'pre-wrap' }}>
-                <strong>{t('bot')}:</strong> {msg.bot}
+                <strong>{t('bot')}:</strong> <span className="bot-text">{msg.bot}</span>
               </p>
             </div>
           ))

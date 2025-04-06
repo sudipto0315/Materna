@@ -1,4 +1,3 @@
-// src/pages/Chatbot.tsx
 import React, { useState, useMemo } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { translations } from '../locales/translations';
@@ -6,7 +5,9 @@ import Navigation from '../components/Navigation';
 import TextChatbot from '../components/TextChatbot';
 import VoiceChatbot from '../components/VoiceChatbot';
 import { useApp } from '../contexts/AppContext';
-import { languageNames } from '../constants/languageNames.ts'; // Import language mappings
+import { languageNames } from '../constants/languageNames.ts';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faStethoscope, faKeyboard, faMicrophone } from '@fortawesome/free-solid-svg-icons';
 import '../App.css';
 
 const ChatbotPage: React.FC = () => {
@@ -15,7 +16,6 @@ const ChatbotPage: React.FC = () => {
   const [mode, setMode] = useState<'text' | 'voice'>('text');
   const { medicalReports, patientData } = useApp();
 
-  // Generate the initial prompt with language instruction and formatting request
   const initialPrompt = useMemo(() => {
     if (!medicalReports || medicalReports.length === 0) {
       return 'No medical reports available for analysis.';
@@ -48,16 +48,22 @@ const ChatbotPage: React.FC = () => {
     prompt += "4. Recommendations\n";
     prompt += "5. Next Steps\n";
     return prompt;
-  }, [medicalReports, patientData, language]); // Add language to dependencies
+  }, [medicalReports, patientData, language]);
 
   return (
     <div>
       <Navigation />
       <div className="app">
-        <h1>{t('chatbotApp')}</h1>
+        <h1>
+          <FontAwesomeIcon icon={faStethoscope} /> {t('chatbotApp')}
+        </h1>
         <div className="mode-selector">
-          <button onClick={() => setMode('text')}>{t('textChatbot')}</button>
-          <button onClick={() => setMode('voice')}>{t('voiceChatbot')}</button>
+          <button onClick={() => setMode('text')}>
+            <FontAwesomeIcon icon={faKeyboard} /> {t('textChatbot')}
+          </button>
+          <button onClick={() => setMode('voice')}>
+            <FontAwesomeIcon icon={faMicrophone} /> {t('voiceChatbot')}
+          </button>
         </div>
         {mode === 'text' ? (
           <TextChatbot initialPrompt={initialPrompt} language={language} />

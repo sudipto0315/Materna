@@ -1,8 +1,10 @@
 /* Existing website styles */
 #root {
-  max-width: 1280px;
+  width: 100%; /* Full width of the screen */
+  margin: 0 auto; /* No extra margins */
+  padding: 0; /* No padding to avoid gaps */
+  text-align: center;
   margin: 0 auto;
-  padding: 2rem;
   text-align: center;
 }
 
@@ -45,45 +47,65 @@
 /* Chatbot styles with red and white palette */
 body {
   font-family: 'Noto Sans Devanagari', sans-serif;
+  margin: 0;
+  padding: 0;
 }
 
 .app {
+  
   text-align: center;
   padding: 20px;
-  background-color: #fff; /* White background for the entire app */
-  min-height: 100vh; /* Ensure it takes full height */
+  background-color: #fff;
+  min-height: 100vh;
 }
 
 .app h1 {
-  color: #ff6b6b; /* Red - materna.DEFAULT */
+  color: #ff6b6b;
   font-size: 2rem;
   margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app h1 svg {
+  margin-right: 8px;
 }
 
 .mode-selector {
+  display: flex;
+  flex-direction: row;
+  gap: 20px;
+  align-items: center;
   margin-bottom: 20px;
+  margin-left: 400px;
 }
 
 .mode-selector button {
-  margin: 0 10px;
   padding: 10px 20px;
   font-size: 16px;
   cursor: pointer;
-  background-color: #ff6b6b; /* Red - materna.DEFAULT */
+  background-color: #ff6b6b;
   color: white;
   border: none;
   border-radius: 5px;
   transition: background-color 0.3s;
+  display: flex;
+  align-items: center;
+}
+
+.mode-selector button svg {
+  margin-right: 8px;
 }
 
 .mode-selector button:hover {
-  background-color: #e52d2d; /* Darker red - materna.600 */
+  background-color: #e52d2d;
 }
 
 .chatbot {
   margin: 20px auto;
-  max-width: 600px;
-  background-color: #fff; /* White background for the chatbot container */
+  max-width: 800px;
+  background-color: #fff;
   border: 1px solid #ccc;
   border-radius: 10px;
   padding: 20px;
@@ -91,11 +113,11 @@ body {
 }
 
 .chat-window {
-  height: 400px;
+  height: 600px;
   overflow-y: auto;
   border: 1px solid #ccc;
-  padding: 10px;
-  background-color: #fff; /* White */
+  padding: 20px;
+  background-color: #fff;
   border-radius: 5px;
   margin-bottom: 20px;
 }
@@ -110,14 +132,18 @@ body {
   line-height: 1.5;
 }
 
-.user {
+.message.user {
   text-align: right;
-  color: #ff6b6b; /* Red - materna.DEFAULT */
+  color: #333333;
 }
 
-.bot {
+.message.user .user-text {
+  font-weight: bold;
+}
+
+.message.bot {
   text-align: left;
-  color: #e52d2d; /* Darker red - materna.600 */
+  color: #ff6b6b;
 }
 
 .input-area {
@@ -136,7 +162,7 @@ body {
 .input-area button {
   padding: 8px 16px;
   margin-left: 10px;
-  background-color: #ff6b6b; /* Red - materna.DEFAULT */
+  background-color: #ff6b6b;
   color: white;
   border: none;
   cursor: pointer;
@@ -145,7 +171,7 @@ body {
 }
 
 .input-area button:hover {
-  background-color: #e52d2d; /* Darker red - materna.600 */
+  background-color: #e52d2d;
 }
 
 .input-area button:disabled {
@@ -161,7 +187,7 @@ body {
 .voice-control button {
   padding: 10px 20px;
   font-size: 16px;
-  background-color: #ff6b6b; /* Red - materna.DEFAULT */
+  background-color: #ff6b6b;
   color: white;
   border: none;
   cursor: pointer;
@@ -170,7 +196,7 @@ body {
 }
 
 .voice-control button:hover {
-  background-color: #e52d2d; /* Darker red - materna.600 */
+  background-color: #e52d2d;
 }
 
 .voice-control button:disabled {
