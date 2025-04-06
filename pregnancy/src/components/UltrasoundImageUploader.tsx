@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { FileUp, Upload, Image as ImageIcon, Loader2 } from "lucide-react";
+import BACKEND_URL from "../configs/config";
 
 interface UltrasoundImage {
   id: string;
@@ -149,7 +150,7 @@ const UltrasoundImageUploader: React.FC<UltrasoundImageUploaderProps> = ({ onIma
       const formData = new FormData();
       formData.append('image', selectedImage.file);
       console.log("Sending POST request to /predict");
-      const response = await fetch('http://localhost:3000/predict', {
+      const response = await fetch(`${BACKEND_URL}/predict`, {
         method: 'POST',
         body: formData,
       });

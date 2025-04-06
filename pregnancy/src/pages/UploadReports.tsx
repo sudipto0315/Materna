@@ -19,7 +19,7 @@ import ProgressMetrics from "@/components/ProgressMetrics";
 import { FileUp, Upload, AlertTriangle, Loader2 } from "lucide-react"; // Added Loader2
 import MultiFileUploader, { ReportFile } from "@/components/MultiFileUploader";
 // Removed unused UltrasoundImageUploader import
-// import UltrasoundImageUploader from "@/components/UltrasoundImageUploader";
+import UltrasoundImageUploader from "@/components/UltrasoundImageUploader";
 
 // Simple cache type
 type TranslationCache = {
@@ -758,6 +758,34 @@ const UploadReportsPage: React.FC = () => {
                     category="ultrasound"
                     usedSlots={getUsedSlots("ultrasound")}
                   />
+
+                  {/* Upload Ultrasound Scan Images */}
+                  <div className="mt-6 mb-4">
+                    <h3 className="text-md font-medium mb-2">Upload Ultrasound Scan Images</h3>
+                    <p className="text-sm text-gray-500 mb-4">Upload images from your ultrasound scan to keep a visual record of your baby's development.</p>
+                    <UltrasoundImageUploader 
+                      onImageUpload={(imageUrl) => {
+                        // Create new ultrasound image entry
+                        const newUltrasoundImage = {
+                          id: `ultrasound_${Date.now()}`,
+                          type: reportType,
+                          date: reportDate,
+                          fileUrl: imageUrl, // Use imageUrl as fileUrl
+                          notes,
+                          category: "ultrasound", // Add the missing category property
+                        };
+                        
+                        // Add the new report using addMedicalReport
+                        addMedicalReport(newUltrasoundImage);
+                        
+                        toast({
+                          title: "Image uploaded",
+                          description: "Your ultrasound scan image has been saved successfully."
+                        });
+                      }}
+                    />
+                  </div>
+
                   {/* Common Date */}
                   <div className="space-y-2">
                     <Label htmlFor="ultrasound-date">{content.scanDateLabel}</Label>

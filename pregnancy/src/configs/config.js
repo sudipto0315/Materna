@@ -1,2 +1,2 @@
-const BACKEND_URL = 'http://65.0.20.143/api';
+const BACKEND_URL = 'http://localhost:6001';
 export default BACKEND_URL;

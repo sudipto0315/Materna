@@ -110,7 +110,7 @@ const Navigation: React.FC<NavigationProps> = ({ className }) => {
                   <option value="en">English</option>
                   <option value="hi">हिन्दी</option>
                   <option value="bn">বাংলা</option>
-                  <option value="as"> অসমীয়া</option>
+                  <option value="as">অসমীয়া</option>
                   <option value="gu">ગુજરાતી</option>
                   <option value="pu">ਪੰਜਾਬੀ</option>
                   <option value="mr">मराठी</option>
