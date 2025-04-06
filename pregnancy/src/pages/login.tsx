@@ -8,8 +8,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "@/hooks/use-toast";
 import axios from "axios";
 import { Lock, User } from "lucide-react";
+import BACKEND_URL from "../configs/config";
 
 const LoginPage: React.FC = () => {
+  console.log(BACKEND_URL);
   const navigate = useNavigate();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -44,7 +46,7 @@ const LoginPage: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const response = await axios.post("/api/login", {
+      const response = await axios.post(`${BACKEND_URL}/login`, {
         username,
         password,
       });
@@ -54,7 +56,7 @@ const LoginPage: React.FC = () => {
 
       // Check if the user has registered patient data
       try {
-        await axios.get("/api/patient-data", {
+        await axios.get(`${BACKEND_URL}/patient-data`, {
           headers: { Authorization: `Bearer ${access_token}` },
         });
         navigate("/dashboard");
